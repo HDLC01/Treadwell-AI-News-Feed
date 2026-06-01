@@ -50,6 +50,7 @@ class ProjectSummary(BaseModel):
     county: Optional[str] = None
     distance_mi: Optional[float] = None
     in_radius: Optional[bool] = None
+    within_70mi: Optional[bool] = None
     relevance_score: Optional[int] = None
     relevance_tier: Optional[str] = None
     team_confidence: str = "unknown"
@@ -152,6 +153,7 @@ class Stats(BaseModel):
     today: int = 0
     hot: int = 0
     in_radius: int = 0
+    within_70mi: int = 0
     data_centers: int = 0
 
 

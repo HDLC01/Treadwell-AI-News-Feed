@@ -108,6 +108,7 @@ export interface ProjectSummary {
   county: string | null;
   distance_mi: number | null;
   in_radius: boolean | null;
+  within_70mi: boolean | null;
   relevance_score: number | null;
   relevance_tier: RelevanceTier | null;
   team_confidence: TeamConfidence;
@@ -191,6 +192,7 @@ export interface Stats {
   today: number;
   hot: number;
   in_radius: number;
+  within_70mi: number;
   data_centers: number;
 }
 

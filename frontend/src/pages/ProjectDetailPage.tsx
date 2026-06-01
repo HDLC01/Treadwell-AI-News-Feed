@@ -364,16 +364,16 @@ export function ProjectDetailPage() {
             <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
             {fmtMiles(project.distance_mi)}
           </span>
-          {project.in_radius ? (
+          {project.within_70mi ? (
             <span className="inline-flex items-center gap-1 rounded-full border border-border bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-              In radius
+              Within 70 mi
             </span>
-          ) : (
+          ) : project.within_70mi === false ? (
             <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-fg/60">
-              Out of radius
+              Outside 70 mi
             </span>
-          )}
+          ) : null}
         </div>
 
         <p className="mt-2 flex items-center gap-1 text-sm text-fg/70">

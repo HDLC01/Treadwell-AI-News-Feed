@@ -42,6 +42,16 @@ _ROLE_PRIORITY = {
 _VALID_STATUSES = {"new", "active", "watching", "pursuing", "archived", "dismissed"}
 
 
+def _within_70(distance_mi) -> Optional[bool]:
+    """True if within the 70-mile priority radius of the office; None if distance unknown."""
+    if distance_mi is None:
+        return None
+    try:
+        return float(distance_mi) <= settings.OTHER_RADIUS_MI
+    except (TypeError, ValueError):
+        return None
+
+
 # ─── DB helpers (only used when Supabase configured) ─────────────────────
 def _sb():
     from services.supabase_client import get_supabase
@@ -133,6 +143,7 @@ def _row_to_summary(p: Dict[str, Any]) -> Dict[str, Any]:
         "county": p.get("county"),
         "distance_mi": p.get("distance_mi"),
         "in_radius": p.get("in_radius"),
+        "within_70mi": _within_70(p.get("distance_mi")),
         "relevance_score": p.get("relevance_score"),
         "relevance_tier": p.get("relevance_tier"),
         "team_confidence": p.get("team_confidence", "unknown"),
@@ -240,6 +251,9 @@ def list_projects(
         rows.sort(key=lambda r: (r.get("last_signal_at") or ""), reverse=True)
     else:
         rows.sort(key=lambda r: (r.get("relevance_score") or 0), reverse=True)
+    # 70-mile projects are the priority: stable-sort them to the top, preserving
+    # whatever secondary order was chosen above (Python sort is stable).
+    rows.sort(key=lambda r: _within_70(r.get("distance_mi")) is not True)
 
     total = len(rows)
     start = (page - 1) * page_size
@@ -388,7 +402,7 @@ def get_stats() -> Stats:
         rows = _retry(
             lambda: _sb()
             .table("projects")
-            .select("status,relevance_tier,in_radius,project_type,first_seen_at,last_signal_at")
+            .select("status,relevance_tier,in_radius,distance_mi,project_type,first_seen_at,last_signal_at")
             .execute()
             .data
         ) or []
@@ -410,5 +424,6 @@ def get_stats() -> Stats:
         ),
         hot=sum(1 for r in visible if (r.get("relevance_tier") or "") == "hot"),
         in_radius=sum(1 for r in visible if r.get("in_radius")),
+        within_70mi=sum(1 for r in visible if _within_70(r.get("distance_mi")) is True),
         data_centers=sum(1 for r in visible if (r.get("project_type") or "") == "data_center"),
     )

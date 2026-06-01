@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Building,
   ChevronRight,
+  MapPin,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProjectSummary } from "../lib/types";
@@ -101,6 +102,18 @@ export default function ProjectCard({ project: p }: Props) {
           <p className="mt-1 truncate text-xs text-cold">{meta}</p>
         </div>
       </div>
+
+      {/* 70-mile priority indicator (the office service radius) */}
+      {p.within_70mi !== null && (
+        <span
+          className={`inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
+            p.within_70mi ? "bg-primary/10 text-primary" : "bg-muted text-cold"
+          }`}
+        >
+          <MapPin className="h-3 w-3" aria-hidden="true" />
+          {p.within_70mi ? "Within 70 mi" : "Outside 70 mi"}
+        </span>
+      )}
 
       {/* Team line — the one highlighted element: who to get in front of */}
       {top ? (

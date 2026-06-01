@@ -161,7 +161,12 @@ export default function FeedPage() {
           tone="primary"
           loading={statsLoading}
         />
-        <Stat value={stats?.in_radius} label="in radius" loading={statsLoading} />
+        <Stat
+          value={stats?.within_70mi}
+          label="within 70 mi"
+          tone="primary"
+          loading={statsLoading}
+        />
         <span className="hidden h-4 w-px bg-border sm:inline-block" aria-hidden="true" />
         <Stat value={stats?.new} label="new" loading={statsLoading} />
         <Stat value={stats?.today} label="today" loading={statsLoading} />
