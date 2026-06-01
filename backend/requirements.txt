@@ -1,0 +1,26 @@
+# ─── Treadwell AI News Feed — backend requirements ───────────────────────
+# The API runs in DEMO_MODE with ONLY the core deps below installed.
+# Everything under "Pipeline / ingestion (optional)" is imported LAZILY inside
+# the functions that use them, so a bare `pip install fastapi uvicorn pydantic
+# pydantic-settings python-multipart` is enough to start the app and serve fixtures.
+
+# ─── Core API (required to start the app) ────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-multipart==0.0.20
+
+# ─── Database (lazy: only imported when Supabase is configured) ───────────
+supabase==2.11.0
+
+# ─── Pipeline / ingestion (lazy: only imported during a pipeline run) ─────
+httpx==0.28.1
+feedparser==6.0.11
+beautifulsoup4==4.12.3
+lxml==5.3.0
+apscheduler==3.11.0
+python-dateutil==2.9.0.post0
+
+# ─── Email (lazy: Resend is called over plain HTTP via httpx) ─────────────
+# No separate SDK needed — mailer.py POSTs to the Resend REST API with httpx.

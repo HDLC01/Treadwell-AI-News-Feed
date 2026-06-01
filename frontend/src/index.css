@@ -1,0 +1,95 @@
+@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --fg: #0f172a;
+  --muted: #e9eef6;
+  --border: #dbeafe;
+  --primary: #1e40af;
+  --primary-fg: #ffffff;
+  --secondary: #3b82f6;
+  --accent: #d97706;
+  --accent-fg: #0b1220;
+  --destructive: #dc2626;
+  --destructive-fg: #ffffff;
+  --hot: #dc2626;
+  --warm: #d97706;
+  --cold: #64748b;
+  --ring: #1e40af;
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #0b1220;
+  --surface: #131c2e;
+  --fg: #e5edf7;
+  --muted: #1c2740;
+  --border: #24324f;
+  --primary: #3b82f6;
+  --primary-fg: #0b1220;
+  --secondary: #60a5fa;
+  --accent: #f59e0b;
+  --accent-fg: #0b1220;
+  --destructive: #f87171;
+  --destructive-fg: #0b1220;
+  --hot: #f87171;
+  --warm: #f59e0b;
+  --cold: #94a3b8;
+  --ring: #3b82f6;
+
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: "Fira Sans", ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Visible focus ring for keyboard users / accessibility. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  /* Numerals, IDs, distances, MW, $ — tabular figures in Fira Code. */
+  .num {
+    font-family: "Fira Code", ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+}
+
+/* Honor the user's reduced-motion preference everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

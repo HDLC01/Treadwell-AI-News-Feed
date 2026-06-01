@@ -1,0 +1,42 @@
+# Keep the build context small + reproducible (SPEC §6).
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Vite — node_modules is reinstalled in the build stage;
+# dist is rebuilt in the build stage, never copied from the host.
+**/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Secrets / env (compose injects .env at runtime via env_file, not the image)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# VCS / editor / OS
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Docs + deploy notes (not needed inside the image)
+deploy/
+*.md
+!backend/**/*.md
+
+# Logs
+*.log

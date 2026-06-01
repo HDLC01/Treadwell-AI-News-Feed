@@ -1,0 +1,28 @@
+# Treadwell AI News Feed — single-service compose (SPEC §6).
+# Binds to 127.0.0.1 only; nginx on the host reverse-proxies 80/443 -> 8890.
+services:
+  treadwell-newsfeed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: treadwell-newsfeed:latest
+    container_name: treadwell-newsfeed
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      # Loopback-only: nginx terminates TLS and proxies to this.
+      - "127.0.0.1:8890:8890"
+    volumes:
+      # Persist the logged-in `claude` CLI credentials across restarts/rebuilds
+      # so the container does not need to re-auth (matches the proposal-tool pattern).
+      - claude_credentials:/root/.claude
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8890/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  claude_credentials:
