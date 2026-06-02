@@ -71,6 +71,27 @@ export default function MapPage() {
     [config],
   );
 
+  // Tier filter: which categories are shown on the map (all on by default).
+  const [tiers, setTiers] = useState<Set<RelevanceTier>>(
+    () => new Set<RelevanceTier>(["hot", "warm", "cold"]),
+  );
+  const counts = useMemo(() => {
+    const c: Record<RelevanceTier, number> = { hot: 0, warm: 0, cold: 0 };
+    for (const p of points) c[p.relevance_tier ?? "cold"] += 1;
+    return c;
+  }, [points]);
+  const visiblePoints = useMemo(
+    () => points.filter((p) => tiers.has(p.relevance_tier ?? "cold")),
+    [points, tiers],
+  );
+  const toggleTier = (t: RelevanceTier) =>
+    setTiers((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
+      return next;
+    });
+
   return (
     <div className="space-y-4">
       <div>
@@ -83,6 +104,43 @@ export default function MapPage() {
           and every located project plotted by relevance.
         </p>
       </div>
+
+      {/* Tier filter — show leads by category (Hot / Warm / Cold) */}
+      {!loading && !error && center && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-cold">Show:</span>
+          {(["hot", "warm", "cold"] as const).map((t) => {
+            const on = tiers.has(t);
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => toggleTier(t)}
+                aria-pressed={on}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-150"
+                style={{
+                  borderColor: TIER_COLORS[t],
+                  color: TIER_COLORS[t],
+                  backgroundColor: on ? `${TIER_COLORS[t]}1A` : "transparent",
+                  opacity: on ? 1 : 0.45,
+                }}
+                title={on ? `Hide ${tierLabel(t)}` : `Show ${tierLabel(t)}`}
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: TIER_COLORS[t] }}
+                  aria-hidden="true"
+                />
+                {tierLabel(t)}
+                <span className="num">{counts[t]}</span>
+              </button>
+            );
+          })}
+          <span className="text-xs text-cold">
+            {visiblePoints.length} of {points.length} shown
+          </span>
+        </div>
+      )}
 
       {loading ? (
         <div className="h-[calc(100vh-8rem)] w-full animate-pulse rounded-xl border border-border bg-muted motion-reduce:animate-none" />
@@ -167,8 +225,8 @@ export default function MapPage() {
               </Popup>
             </CircleMarker>
 
-            {/* Projects */}
-            {points.map((p) => {
+            {/* Projects (filtered by the active tier toggles) */}
+            {visiblePoints.map((p) => {
               const color = tierColor(p.relevance_tier);
               const loc = locationLine(p.city, p.state);
               return (
