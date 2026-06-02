@@ -54,6 +54,10 @@ def build_and_send_hot_summary() -> dict:
 
     count = int(getattr(s, "SUMMARY_COUNT", 5) or 5)
     threshold = float(getattr(s, "OTHER_RADIUS_MI", 70) or 70)
+    recency_days = int(getattr(s, "SUMMARY_RECENCY_DAYS", 365) or 365)
+    from services import recency
+
+    cutoff = recency.cutoff_iso_days(recency_days)
 
     try:
         rows = with_supabase_retry(
@@ -66,6 +70,7 @@ def build_and_send_hot_summary() -> dict:
             .is_("merged_into", "null")
             .in_("relevance_tier", ["hot", "warm"])
             .not_.in_("status", ["archived", "dismissed"])
+            .gte("last_signal_at", cutoff)
             .order("relevance_score", desc=True)
             .limit(60)
             .execute()

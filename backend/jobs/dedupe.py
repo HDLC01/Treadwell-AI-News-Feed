@@ -108,14 +108,39 @@ def merge_exact_duplicates() -> dict:
     return {"clusters": clusters, "merged": merged}
 
 
+def archive_stale_projects() -> int:
+    """Archive new/active projects whose latest signal is older than STALE_MONTHS.
+
+    Only touches status in (new, active) — never archives something Kyle is tracking
+    (watching/pursuing/won/passed) or already archived/dismissed. Returns count archived.
+    """
+    from config import settings
+    from services import recency
+
+    months = int(getattr(settings, "STALE_MONTHS", 18) or 18)
+    cutoff = recency.cutoff_iso_months(months)
+    res = with_supabase_retry(
+        lambda: get_supabase()
+        .table("projects")
+        .update({"status": "archived"})
+        .is_("merged_into", "null")
+        .in_("status", ["new", "active"])
+        .lt("last_signal_at", cutoff)
+        .execute()
+        .data
+    ) or []
+    return len(res)
+
+
 def dedupe_existing() -> dict:
-    """Recompute keys + merge exact duplicates. Best-effort; never raises."""
+    """Recompute keys + merge exact duplicates + archive stale projects. Best-effort."""
     if not is_configured():
         return {"skipped": True, "reason": "no DB configured"}
     try:
         keys_recomputed = recompute_dedup_keys()
         res = merge_exact_duplicates()
         res["keys_recomputed"] = keys_recomputed
+        res["archived_stale"] = archive_stale_projects()
         log.info("dedupe_existing: %s", res)
         return res
     except Exception as exc:  # noqa: BLE001

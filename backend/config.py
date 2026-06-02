@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     DATA_CENTER_RADIUS_MI: float = 350.0
     OTHER_RADIUS_MI: float = 70.0
 
+    # ─── Recency (keep the radar to current opportunities) ───────────────
+    # A project whose most-recent article/signal is older than STALE_MONTHS is
+    # treated as stale: forced cold and auto-archived out of the feed. New signals
+    # older than this are skipped at ingest. The 6 AM summary only includes leads
+    # whose latest signal is within SUMMARY_RECENCY_DAYS.
+    STALE_MONTHS: int = 18
+    SUMMARY_RECENCY_DAYS: int = 365
+
     # ─── Scheduler / pipeline ────────────────────────────────────────────
     PIPELINE_HOUR: int = 5
     PIPELINE_TZ: str = "America/Chicago"

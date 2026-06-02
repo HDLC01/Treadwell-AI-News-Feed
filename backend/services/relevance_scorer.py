@@ -76,6 +76,12 @@ def score_project(project: dict) -> dict:
     if not isinstance(reasoning, dict):
         reasoning = {"summary": str(reasoning)}
 
+    # Recency override: a stale latest article means it is not a current opportunity.
+    if _stale(project.get("last_signal_at")):
+        score = min(score, 35)
+        tier = "cold"
+        reasoning["recency"] = "stale — latest article older than the freshness window"
+
     return {
         "relevance_score": score,
         "relevance_tier": tier,
@@ -231,6 +237,17 @@ def _num(v) -> Optional[float]:
         return None
 
 
+def _stale(last_signal_at) -> bool:
+    """True if the project's latest signal is older than settings.STALE_MONTHS."""
+    try:
+        from config import settings
+        from services import recency
+
+        return recency.is_older_than_months(last_signal_at, int(getattr(settings, "STALE_MONTHS", 18) or 18))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def rescore_all_rule_based() -> dict:
     """Re-score every non-merged project with the (rebalanced) rule-based scorer.
 
@@ -248,7 +265,7 @@ def rescore_all_rule_based() -> dict:
         .table("projects")
         .select(
             "id, project_type, stage, in_radius, distance_mi, team_confidence, "
-            "est_value_usd, est_sqft, est_megawatts"
+            "est_value_usd, est_sqft, est_megawatts, last_signal_at"
         )
         .is_("merged_into", "null")
         .execute()
@@ -259,6 +276,8 @@ def rescore_all_rule_based() -> dict:
     for p in rows:
         r = _score_via_rules(p)
         sc, tier = r["relevance_score"], r["relevance_tier"]
+        if _stale(p.get("last_signal_at")):
+            sc, tier = min(sc, 35), "cold"
         tally[tier] = tally.get(tier, 0) + 1
         pid = p["id"]
         with_supabase_retry(

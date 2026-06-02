@@ -73,6 +73,8 @@ def run_pipeline(trigger: str = "scheduled") -> dict:
 
         for cand in candidates:
             try:
+                if _published_too_old(cand.get("published_at")):
+                    continue  # stale article — not a current opportunity
                 signal_id, is_new_signal = _ingest_signal(cand, ingest)
                 if not is_new_signal:
                     continue  # duplicate content_hash — already processed
@@ -353,7 +355,7 @@ def _score_and_persist(project_id: str, scorer_mod) -> None:
         .table("projects")
         .select(
             "id, title, project_type, stage, city, state, in_radius, distance_mi, "
-            "team_confidence, est_value_usd, est_sqft, est_megawatts"
+            "team_confidence, est_value_usd, est_sqft, est_megawatts, last_signal_at"
         )
         .eq("id", project_id)
         .limit(1)
@@ -460,6 +462,17 @@ def _send_digest_to_subscribers(digest_id: Optional[str]) -> None:
 
 
 # ─── time helpers ──────────────────────────────────────────────────────────
+def _published_too_old(published_at) -> bool:
+    """True if an article's published_at is older than the freshness window (skip at ingest)."""
+    try:
+        from config import settings
+        from services import recency
+
+        return recency.is_older_than_months(published_at, int(getattr(settings, "STALE_MONTHS", 18) or 18))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
