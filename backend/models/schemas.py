@@ -60,6 +60,7 @@ class ProjectSummary(BaseModel):
     est_value_usd: Optional[float] = None
     est_sqft: Optional[float] = None
     status: str = "new"
+    notes: Optional[str] = None
     last_signal_at: Optional[str] = None
     first_seen_at: Optional[str] = None
 
@@ -177,9 +178,10 @@ class HealthResponse(BaseModel):
 
 
 class StatusUpdate(BaseModel):
-    """PATCH /api/projects/{id} request body."""
+    """PATCH /api/projects/{id} request body — set status and/or notes."""
 
-    status: str
+    status: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class MergeRequest(BaseModel):

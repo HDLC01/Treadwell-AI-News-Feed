@@ -1,15 +1,17 @@
 """
 Clustering / dedup: map an extracted record onto an existing project, or create one.
 
-Strategy:
-  1. Deterministic blocking by `dedup_key` = normalize(title) | normalize(city).
-  2. If exactly one candidate blocks, reuse it.
-  3. If multiple candidates block (ambiguous), ask `claude -p` to adjudicate
-     ("same project? -> {decision, target_project_id, confidence}").
-  4. Otherwise create a new project.
+Strategy (hardened — Phase 2):
+  1. Deterministic blocking by `dedup_key` = sorted(noise-stripped title tokens) | normalize(city).
+     Tokens are SORTED so word-order variants collide:
+     "Google KC Northland Data Center" == "Google Data Center - KC Northland".
+  2. Exact-key (or aka) block: 1 candidate -> reuse; >1 -> `claude -p` adjudicates.
+  3. If NO exact block, gather FUZZY candidates (high title-token overlap, same type)
+     and let `claude -p` adjudicate before creating a brand-new project.
+  4. On reuse, ENRICH the existing project with better/missing fields (don't discard).
 
-normalize_name strips legal suffixes + punctuation; dedup_key composes title+city.
-All writes go through services.supabase_client. Imports cleanly with no DB configured.
+normalize_name strips legal suffixes + punctuation. All writes go through
+services.supabase_client. Imports cleanly with no DB configured.
 """
 
 from __future__ import annotations
@@ -25,52 +27,23 @@ log = logging.getLogger("newsfeed.cluster")
 
 # Legal / corporate suffixes stripped during normalization.
 _LEGAL_SUFFIXES = {
-    "inc",
-    "inc.",
-    "incorporated",
-    "llc",
-    "l.l.c.",
-    "llp",
-    "lp",
-    "ltd",
-    "ltd.",
-    "limited",
-    "co",
-    "co.",
-    "company",
-    "corp",
-    "corp.",
-    "corporation",
-    "plc",
-    "pllc",
-    "pc",
-    "group",
-    "holdings",
-    "partners",
-    "development",
-    "developments",
-    "properties",
-    "realty",
-    "construction",
-    "builders",
-    "constructors",
-    "the",
+    "inc", "inc.", "incorporated", "llc", "l.l.c.", "llp", "lp", "ltd", "ltd.",
+    "limited", "co", "co.", "company", "corp", "corp.", "corporation", "plc",
+    "pllc", "pc", "group", "holdings", "partners", "development", "developments",
+    "properties", "realty", "construction", "builders", "constructors", "the",
 }
 
 # Generic project-noise words removed when building a dedup key from a title.
+# "data" is included so "... Data Center" fully collapses to the proper-noun tokens.
 _TITLE_NOISE = {
-    "project",
-    "facility",
-    "campus",
-    "development",
-    "expansion",
-    "phase",
-    "new",
-    "proposed",
-    "planned",
-    "site",
-    "center",
-    "centre",
+    "project", "facility", "campus", "development", "expansion", "phase", "new",
+    "proposed", "planned", "site", "center", "centre", "data", "building",
+}
+
+# Lifecycle order — used to ADVANCE a project's stage on enrichment (never regress).
+_STAGE_ORDER = {
+    "rumored": 0, "planning": 1, "design": 2, "permitting": 3, "procurement": 4,
+    "pre_bid": 5, "under_construction": 6, "complete": 7, "dead": 8,
 }
 
 _ADJUDICATION_SYSTEM = """You decide whether a newly-extracted construction project refers \
@@ -87,56 +60,52 @@ Return ONLY this JSON object (no prose, no fences):
 
 
 def normalize_name(s: str) -> str:
-    """Lowercase, strip punctuation + legal suffixes, collapse whitespace.
-
-    Used for companies.normalized_name and as a building block for dedup_key.
-    """
+    """Lowercase, strip punctuation + legal suffixes, collapse whitespace."""
     if not s:
         return ""
     s = s.lower().strip()
-    # Replace ampersand, drop other punctuation.
     s = s.replace("&", " and ")
     s = re.sub(r"[^a-z0-9\s]", " ", s)
     tokens = [t for t in s.split() if t and t not in _LEGAL_SUFFIXES]
     return " ".join(tokens).strip()
 
 
-def dedup_key(title: str, city: Optional[str]) -> str:
-    """Build the deterministic blocking key: normalized(title) | normalized(city).
+def _key_tokens(title: str) -> list[str]:
+    """Sorted, noise-stripped tokens of a title — the basis of an order-insensitive key."""
+    return sorted(t for t in normalize_name(title).split() if t not in _TITLE_NOISE)
 
-    Title normalization additionally drops generic project-noise words so that
-    "New Acme Data Center Project" and "Acme Data Center" block together.
-    """
-    norm_title_tokens = [t for t in normalize_name(title).split() if t not in _TITLE_NOISE]
-    norm_title = " ".join(norm_title_tokens).strip()
+
+def dedup_key(title: str, city: Optional[str]) -> str:
+    """Order-insensitive blocking key: sorted(noise-stripped title tokens) | normalized(city)."""
+    norm_title = " ".join(_key_tokens(title)).strip()
     norm_city = normalize_name(city or "")
     return f"{norm_title}|{norm_city}"
+
+
+def _token_set(title: str) -> set[str]:
+    return set(_key_tokens(title))
+
+
+def _overlap(a: set[str], b: set[str]) -> float:
+    """Jaccard overlap of two token sets (0..1)."""
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
 
 
 def find_or_create_project(extracted: dict, existing_candidates: list[dict]) -> tuple[str, bool]:
     """Map `extracted` onto an existing project or create a new one.
 
-    Args:
-        extracted: cleaned dict from signal_extractor.extract_signal (project_name,
-            project_type, stage, location{city,...}, est_*, dedup_hints{aka_names}, ...).
-        existing_candidates: project rows to consider (at minimum id, title, city,
-            dedup_key, project_type). The caller may prefilter; this function also
-            blocks internally by dedup_key.
-
-    Returns:
-        (project_id, created) — created=True if a new projects row was inserted.
-
-    Writes via supabase_client. Raises only on hard DB failure.
+    Returns (project_id, created). created=True if a new row was inserted.
     """
     title = (extracted.get("project_name") or "").strip()
     location = extracted.get("location") or {}
     city = location.get("city")
     key = dedup_key(title, city)
+    new_tokens = _token_set(title)
 
-    # ── 1. Deterministic blocking by dedup_key ──
+    # ── 1. Deterministic blocking by dedup_key (+ aka names) ──
     blocked = [c for c in (existing_candidates or []) if (c.get("dedup_key") or "") == key and key.strip("|")]
-
-    # Also block on aka_names: if an aka matches a candidate title, include it.
     aka = [a for a in (extracted.get("dedup_hints") or {}).get("aka_names", []) if isinstance(a, str)]
     if aka:
         aka_keys = {dedup_key(a, city) for a in aka}
@@ -146,16 +115,35 @@ def find_or_create_project(extracted: dict, existing_candidates: list[dict]) -> 
 
     if len(blocked) == 1:
         return blocked[0]["id"], False
-
     if len(blocked) > 1:
         target = _adjudicate(extracted, blocked)
+        return (target, False) if target else (_create_project(extracted, key), True)
+
+    # ── 2. No exact block → fuzzy candidates, then AI adjudication ──
+    fuzzy = _fuzzy_candidates(new_tokens, city, existing_candidates)
+    if fuzzy:
+        target = _adjudicate(extracted, fuzzy)
         if target:
             return target, False
-        # Adjudication said "different" / unsure -> create fresh.
-        return _create_project(extracted, key), True
 
-    # ── No deterministic block: create a new project ──
+    # ── 3. Genuinely new ──
     return _create_project(extracted, key), True
+
+
+def _fuzzy_candidates(new_tokens: set[str], city: Optional[str], candidates: list[dict], limit: int = 5) -> list[dict]:
+    """Candidates with high title-token overlap (or moderate overlap in the same city)."""
+    if not new_tokens:
+        return []
+    norm_city = normalize_name(city or "")
+    scored: list[tuple[float, dict]] = []
+    for c in candidates or []:
+        ct = _token_set(c.get("title") or "")
+        ov = _overlap(new_tokens, ct)
+        same_city = bool(norm_city) and normalize_name(c.get("city") or "") == norm_city
+        if ov >= 0.6 or (same_city and ov >= 0.34):
+            scored.append((ov, c))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [c for _, c in scored[:limit]]
 
 
 def _adjudicate(extracted: dict, candidates: list[dict]) -> Optional[str]:
@@ -198,12 +186,9 @@ def _adjudicate(extracted: dict, candidates: list[dict]) -> Optional[str]:
         return None
     if result.get("decision") != "same":
         return None
-
     target_id = result.get("target_project_id")
     valid_ids = {c.get("id") for c in candidates}
-    if target_id in valid_ids:
-        return target_id
-    return None
+    return target_id if target_id in valid_ids else None
 
 
 def _create_project(extracted: dict, key: str) -> str:
@@ -211,6 +196,7 @@ def _create_project(extracted: dict, key: str) -> str:
     loc = extracted.get("location") or {}
     row = {
         "title": (extracted.get("project_name") or "Untitled project").strip(),
+        "summary": extracted.get("summary"),
         "project_type": extracted.get("project_type") or "other_commercial",
         "stage": extracted.get("stage"),
         "address": loc.get("address"),
@@ -224,7 +210,6 @@ def _create_project(extracted: dict, key: str) -> str:
         "status": "new",
         "team_confidence": "unknown",
     }
-    # Drop None values so DB defaults / nullable columns behave predictably.
     row = {k: v for k, v in row.items() if v is not None}
 
     inserted = with_supabase_retry(
@@ -235,13 +220,55 @@ def _create_project(extracted: dict, key: str) -> str:
     return inserted[0]["id"]
 
 
-def load_candidate_projects(extracted: dict, limit: int = 200) -> list[dict]:
-    """Fetch a reasonable set of existing projects to block against.
+def enrich_existing_project(project_id: str, extracted: dict) -> None:
+    """Fill missing fields + advance stage on an existing project from a new signal.
 
-    Convenience for the daily job: pulls recent, non-merged projects of the same
-    project_type (data centers can match across the whole 350mi ring, so type
-    matters more than city for blocking). Read-only.
+    Fill-if-empty for summary/address/city/state/county/est_*; advance-only for stage.
+    Never overwrites existing non-null values (except a forward stage move). Best-effort.
     """
+    loc = extracted.get("location") or {}
+    cur = with_supabase_retry(
+        lambda: get_supabase()
+        .table("projects")
+        .select("id, summary, address, city, state, county, stage, est_value_usd, est_sqft, est_megawatts")
+        .eq("id", project_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not cur:
+        return
+    p = cur[0]
+    patch: dict = {}
+
+    fill_fields = [
+        ("summary", extracted.get("summary")),
+        ("address", loc.get("address")),
+        ("city", loc.get("city")),
+        ("state", loc.get("state")),
+        ("county", loc.get("county")),
+        ("est_value_usd", extracted.get("est_value_usd")),
+        ("est_sqft", extracted.get("est_sqft")),
+        ("est_megawatts", extracted.get("est_megawatts")),
+    ]
+    for field, val in fill_fields:
+        if val is not None and p.get(field) in (None, ""):
+            patch[field] = val
+
+    new_stage = extracted.get("stage")
+    if new_stage in _STAGE_ORDER:
+        cur_stage = p.get("stage")
+        if cur_stage not in _STAGE_ORDER or _STAGE_ORDER[new_stage] > _STAGE_ORDER[cur_stage]:
+            patch["stage"] = new_stage
+
+    if patch:
+        with_supabase_retry(
+            lambda: get_supabase().table("projects").update(patch).eq("id", project_id).execute()
+        )
+
+
+def load_candidate_projects(extracted: dict, limit: int = 200) -> list[dict]:
+    """Fetch recent non-merged projects of the same project_type to block/fuzzy-match against."""
     project_type = extracted.get("project_type") or "other_commercial"
     rows = with_supabase_retry(
         lambda: get_supabase()

@@ -111,14 +111,26 @@ export function getProjectContacts(
   });
 }
 
+/**
+ * Patch a project's status and/or notes. Either or both fields may be set.
+ * Returns the updated ProjectSummary. (PATCH /api/projects/{id})
+ */
+export function patchProject(
+  id: string,
+  body: { status?: ProjectStatus; notes?: string },
+): Promise<ProjectSummary> {
+  return request<ProjectSummary>(`/api/projects/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Thin wrapper kept for existing callers that only change status. */
 export function patchProjectStatus(
   id: string,
   status: ProjectStatus,
 ): Promise<ProjectSummary> {
-  return request<ProjectSummary>(`/api/projects/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status }),
-  });
+  return patchProject(id, { status });
 }
 
 export function mergeProject(

@@ -37,6 +37,8 @@ export type ProjectStatus =
   | "active"
   | "watching"
   | "pursuing"
+  | "won"
+  | "passed"
   | "archived"
   | "dismissed";
 
@@ -118,6 +120,7 @@ export interface ProjectSummary {
   est_value_usd: number | null;
   est_sqft: number | null;
   status: ProjectStatus;
+  notes: string | null;
   last_signal_at: string;
   first_seen_at: string;
 }

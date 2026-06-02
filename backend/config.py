@@ -39,8 +39,15 @@ class Settings(BaseSettings):
 
     # ─── Email (Resend) ──────────────────────────────────────────────────
     RESEND_API_KEY: str = ""
-    DIGEST_FROM_EMAIL: str = "radar@notify.wetreadwell.com"
+    DIGEST_FROM_EMAIL: str = "newsfeed@notify.wetreadwell.com"
     DIGEST_FROM_NAME: str = "Treadwell Radar"
+
+    # ─── Daily "top hottest" summary (Kyle's 6 AM email) ─────────────────
+    SUMMARY_FROM_EMAIL: str = "newsfeed@notify.wetreadwell.com"
+    SUMMARY_FROM_NAME: str = "Treadwell Radar"
+    SUMMARY_REPLY_TO: str = "hanz@wetreadwell.com"
+    SUMMARY_TO_EMAILS: str = "hanz@wetreadwell.com,kyle@wetreadwell.com"
+    SUMMARY_COUNT: int = 5
 
     # ─── Geography / radius gate ─────────────────────────────────────────
     KC_LAT: float = 39.0997
@@ -79,6 +86,12 @@ class Settings(BaseSettings):
         if self.DEMO_MODE is not None:
             return self.DEMO_MODE
         return not self.supabase_configured
+
+    @property
+    def summary_to_list(self) -> List[str]:
+        """Recipient list for the daily hot-summary email (comma-separated env)."""
+        raw = self.SUMMARY_TO_EMAILS or ""
+        return [e.strip() for e in raw.split(",") if e.strip()]
 
     @property
     def cors_origins_list(self) -> List[str]:

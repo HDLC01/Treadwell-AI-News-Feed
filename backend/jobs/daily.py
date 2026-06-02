@@ -94,6 +94,8 @@ def run_pipeline(trigger: str = "scheduled") -> dict:
                     counters["projects_created"] += 1
                 else:
                     counters["projects_updated"] += 1
+                    # Reuse → enrich the existing project with better/missing fields.
+                    clusterer.enrich_existing_project(project_id, extracted)
                 touched_project_ids.add(project_id)
 
                 # link the signal to its project + bump last_signal_at
@@ -113,6 +115,17 @@ def run_pipeline(trigger: str = "scheduled") -> dict:
                 errors.append({"stage": "signal", "url": cand.get("url"), "error": str(exc)})
                 log.warning("Signal failed (%s): %s", cand.get("url"), exc)
                 continue
+
+        # ── Stage 7.5: post-hoc dedupe (merge same-key duplicate projects) ──
+        try:
+            from jobs import dedupe
+
+            dedupe_res = dedupe.dedupe_existing()
+            if isinstance(dedupe_res, dict) and dedupe_res.get("error"):
+                errors.append({"stage": "dedupe", "error": dedupe_res["error"]})
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"stage": "dedupe", "error": str(exc)})
+            log.warning("Stage 7.5 dedupe failed: %s", exc)
 
         # ── Stage 8: digest ──
         digest_id = None

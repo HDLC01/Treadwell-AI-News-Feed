@@ -69,6 +69,7 @@ Return ONLY a single JSON object (no prose, no markdown fences) with EXACTLY the
 
 {
   "project_name": string,                         // best human name for the project/facility
+  "summary": string,                              // 1-2 sentence NEUTRAL description: what is being built, where, and scale (no sales spin)
   "project_type": one of [data_center, industrial, healthcare, higher_ed, distribution, manufacturing, mission_critical, other_commercial],
   "stage": one of [rumored, planning, design, permitting, procurement, pre_bid, under_construction, complete, dead],
   "location": { "address": string|null, "city": string|null, "state": string|null, "county": string|null },
@@ -190,6 +191,7 @@ def _clean(data: dict, fallback_name: str) -> dict:
 
     return {
         "project_name": project_name,
+        "summary": _str(data.get("summary")),
         "project_type": project_type,
         "stage": stage,
         "location": location,

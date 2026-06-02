@@ -17,6 +17,32 @@ import type {
 const PAGE_SIZE = 25;
 const VALID_SORTS: ProjectSort[] = ["relevance", "distance", "recent"];
 
+type DateBucket = "Today" | "Yesterday" | "This week" | "Older";
+const BUCKET_ORDER: DateBucket[] = ["Today", "Yesterday", "This week", "Older"];
+
+// Bucket a project by its last_signal_at, relative to the start of today.
+// Missing/unparseable dates fall to "Older".
+function dateBucket(iso: string | null | undefined): DateBucket {
+  if (!iso) return "Older";
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return "Older";
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfThen = new Date(then);
+  startOfThen.setHours(0, 0, 0, 0);
+
+  const dayMs = 86_400_000;
+  const diffDays = Math.round(
+    (startOfToday.getTime() - startOfThen.getTime()) / dayMs,
+  );
+
+  if (diffDays <= 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return "This week";
+  return "Older";
+}
+
 function csvToArr(v: string | null): string[] {
   if (!v) return [];
   return v
@@ -148,6 +174,22 @@ export default function FeedPage() {
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
 
+  // Group cards under date headers by last_signal_at, preserving the API's
+  // within-bucket order (within-70-first, then relevance).
+  const groups = useMemo(() => {
+    const map = new Map<DateBucket, ProjectSummary[]>();
+    for (const p of items) {
+      const b = dateBucket(p.last_signal_at);
+      const arr = map.get(b);
+      if (arr) arr.push(p);
+      else map.set(b, [p]);
+    }
+    return BUCKET_ORDER.filter((b) => map.has(b)).map((b) => ({
+      bucket: b,
+      projects: map.get(b) as ProjectSummary[],
+    }));
+  }, [items]);
+
   return (
     <div className="space-y-5">
       {/* Stats strip — one slim bar (replaces six boxed stat cards) */}
@@ -195,9 +237,19 @@ export default function FeedPage() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {items.map((p) => (
-              <ProjectCard key={p.id} project={p} />
+          <div className="space-y-6">
+            {groups.map(({ bucket, projects }) => (
+              <section key={bucket}>
+                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-cold">
+                  {bucket}
+                  <span className="num ml-1.5 font-normal">({projects.length})</span>
+                </h2>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {projects.map((p) => (
+                    <ProjectCard key={p.id} project={p} />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
           <Pagination

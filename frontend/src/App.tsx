@@ -3,6 +3,7 @@ import TopBar from "./components/TopBar";
 import { useTheme } from "./lib/theme";
 import FeedPage from "./pages/FeedPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
+import PipelinePage from "./pages/PipelinePage";
 import DigestsPage from "./pages/DigestsPage";
 import AdminPage from "./pages/AdminPage";
 
@@ -15,6 +16,7 @@ export default function App() {
       <main className="mx-auto w-full max-w-screen-2xl px-4 py-5 sm:px-6 lg:px-8">
         <Routes>
           <Route path="/" element={<FeedPage />} />
+          <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
           <Route path="/digests" element={<DigestsPage />} />
           <Route path="/admin" element={<AdminPage />} />

@@ -1,3 +1,5 @@
+import { useState } from "react";
+import type { MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import {
   Server,
@@ -10,9 +12,13 @@ import {
   Building,
   ChevronRight,
   MapPin,
+  Eye,
+  Crosshair,
+  Loader2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { ProjectSummary } from "../lib/types";
+import type { ProjectStatus, ProjectSummary } from "../lib/types";
+import { patchProject } from "../lib/api";
 import {
   projectTypeLabel,
   stageLabel,
@@ -56,6 +62,32 @@ export default function ProjectCard({ project: p }: Props) {
   const Icon = TYPE_ICON[p.project_type] ?? Building;
   const isDataCenter = p.project_type === "data_center";
   const top = p.top_team_member;
+
+  // Quick-triage state: optimistic status + in-flight guard, so Kyle can Watch
+  // or Pursue a project straight from the feed without opening it.
+  const [status, setStatus] = useState<ProjectStatus>(p.status);
+  const [saving, setSaving] = useState<ProjectStatus | null>(null);
+
+  const triage = async (
+    e: MouseEvent<HTMLButtonElement>,
+    next: ProjectStatus,
+  ) => {
+    // Stop the card's Link from navigating.
+    e.preventDefault();
+    e.stopPropagation();
+    if (saving) return;
+    const prev = status;
+    setStatus(next);
+    setSaving(next);
+    try {
+      const updated = await patchProject(p.id, { status: next });
+      setStatus(updated?.status ?? next);
+    } catch {
+      setStatus(prev);
+    } finally {
+      setSaving(null);
+    }
+  };
 
   // Quiet metadata: type · stage · location · distance (only what exists).
   const meta = [
@@ -141,6 +173,26 @@ export default function ProjectCard({ project: p }: Props) {
         <p className="num truncate text-xs text-fg/70">{facts.join("   ·   ")}</p>
       )}
 
+      {/* Quick triage: Watch / Pursue without leaving the feed */}
+      <div className="flex items-center gap-1.5">
+        <TriageButton
+          label="Watch"
+          icon={Eye}
+          active={status === "watching"}
+          busy={saving === "watching"}
+          disabled={saving !== null}
+          onClick={(e) => void triage(e, "watching")}
+        />
+        <TriageButton
+          label="Pursue"
+          icon={Crosshair}
+          active={status === "pursuing"}
+          busy={saving === "pursuing"}
+          disabled={saving !== null}
+          onClick={(e) => void triage(e, "pursuing")}
+        />
+      </div>
+
       {/* Muted footer: evidence + recency + affordance */}
       <div className="mt-auto flex items-center justify-between gap-2 pt-1 text-xs text-cold">
         <span className="truncate">
@@ -155,5 +207,48 @@ export default function ProjectCard({ project: p }: Props) {
         />
       </div>
     </Link>
+  );
+}
+
+// Small inline triage chip used on the feed card. Reflects the current status
+// (filled when active) and shows a spinner while the PATCH is in flight.
+function TriageButton({
+  label,
+  icon: Icon,
+  active,
+  busy,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  icon: LucideIcon;
+  active: boolean;
+  busy: boolean;
+  disabled: boolean;
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={[
+        "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors duration-200 disabled:opacity-60",
+        active
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-border text-cold hover:bg-muted hover:text-fg",
+      ].join(" ")}
+    >
+      {busy ? (
+        <Loader2
+          className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none"
+          aria-hidden="true"
+        />
+      ) : (
+        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
+      {label}
+    </button>
   );
 }

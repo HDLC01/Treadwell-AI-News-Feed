@@ -87,6 +87,22 @@ def run_pipeline_now(background_tasks: BackgroundTasks) -> RunPipelineResponse:
     )
 
 
+@router.post("/admin/send-hot-summary")
+def send_hot_summary_now() -> dict:
+    """Build + send the daily 'top hottest opportunities' email now (the 6 AM cron hits this).
+
+    Runs synchronously (no Claude calls — reads existing summaries/scores), sends via
+    Resend to SUMMARY_TO_EMAILS. No-op in DEMO_MODE.
+    """
+    if settings.demo_mode:
+        return {"ok": True, "skipped": True, "note": "DEMO_MODE — no DB"}
+
+    from services import summary
+
+    result = summary.build_and_send_hot_summary()
+    return {"ok": "error" not in result, **result}
+
+
 def _iso(value):
     """Normalize a timestamp value (datetime|str|None) to an ISO string or None."""
     if value is None:

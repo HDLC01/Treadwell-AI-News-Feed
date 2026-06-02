@@ -39,7 +39,7 @@ _ROLE_PRIORITY = {
     "other": 8,
 }
 
-_VALID_STATUSES = {"new", "active", "watching", "pursuing", "archived", "dismissed"}
+_VALID_STATUSES = {"new", "active", "watching", "pursuing", "won", "passed", "archived", "dismissed"}
 
 
 def _within_70(distance_mi) -> Optional[bool]:
@@ -153,6 +153,7 @@ def _row_to_summary(p: Dict[str, Any]) -> Dict[str, Any]:
         "est_value_usd": p.get("est_value_usd"),
         "est_sqft": p.get("est_sqft"),
         "status": p.get("status", "new"),
+        "notes": p.get("notes"),
         "last_signal_at": p.get("last_signal_at"),
         "first_seen_at": p.get("first_seen_at"),
     }
@@ -328,12 +329,19 @@ def get_project_signals(project_id: str):
 
 @router.patch("/projects/{project_id}", response_model=ProjectSummary)
 def update_project_status(project_id: str, body: StatusUpdate) -> ProjectSummary:
-    """Update a project's pipeline status (active/watching/pursuing/dismissed/…)."""
-    if body.status not in _VALID_STATUSES:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Invalid status '{body.status}'. Allowed: {sorted(_VALID_STATUSES)}",
-        )
+    """Update a project's pipeline status and/or notes (either or both)."""
+    patch: Dict[str, Any] = {}
+    if body.status is not None:
+        if body.status not in _VALID_STATUSES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid status '{body.status}'. Allowed: {sorted(_VALID_STATUSES)}",
+            )
+        patch["status"] = body.status
+    if body.notes is not None:
+        patch["notes"] = body.notes
+    if not patch:
+        raise HTTPException(status_code=422, detail="Provide 'status' and/or 'notes'.")
 
     if settings.demo_mode:
         from services import fixtures
@@ -341,17 +349,12 @@ def update_project_status(project_id: str, body: StatusUpdate) -> ProjectSummary
         data = fixtures.get_project(project_id)
         if data is None:
             raise HTTPException(status_code=404, detail="Project not found")
-        # DEMO_MODE is read-only; echo the requested status back so the UI updates.
-        data["status"] = body.status
+        # DEMO_MODE is read-only; echo the patch back so the UI updates.
+        data.update(patch)
         return ProjectSummary(**{k: data.get(k) for k in ProjectSummary.model_fields})
 
     updated = _retry(
-        lambda: _sb()
-        .table("projects")
-        .update({"status": body.status})
-        .eq("id", project_id)
-        .execute()
-        .data
+        lambda: _sb().table("projects").update(patch).eq("id", project_id).execute().data
     ) or []
     if not updated:
         raise HTTPException(status_code=404, detail="Project not found")

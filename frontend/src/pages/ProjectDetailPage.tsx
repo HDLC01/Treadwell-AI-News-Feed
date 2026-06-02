@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -14,12 +14,16 @@ import {
   CheckCircle2,
   Eye,
   Crosshair,
+  Trophy,
+  XCircle,
   Archive,
   Ban,
+  Check,
+  StickyNote,
   Loader2,
 } from "lucide-react";
 import type { ProjectDetail, Signal } from "../lib/types";
-import { getProject, getProjectSignals, patchProjectStatus } from "../lib/api";
+import { getProject, getProjectSignals, patchProject } from "../lib/api";
 import { TeamHierarchy } from "../components/TeamHierarchy";
 import { EvidenceList } from "../components/EvidenceList";
 import { ContactsDrawer } from "../components/ContactsDrawer";
@@ -61,12 +65,20 @@ const STAGE_LABELS: Record<string, string> = {
 
 const TIER_LABELS: Record<string, string> = { hot: "Hot", warm: "Warm", cold: "Cold" };
 
-type StatusValue = "active" | "watching" | "pursuing" | "dismissed";
+type StatusValue =
+  | "active"
+  | "watching"
+  | "pursuing"
+  | "won"
+  | "passed"
+  | "dismissed";
 
 const STATUS_OPTIONS: { value: StatusValue; label: string; icon: typeof Eye; destructive?: boolean }[] = [
   { value: "active", label: "Active", icon: CheckCircle2 },
   { value: "watching", label: "Watching", icon: Eye },
   { value: "pursuing", label: "Pursuing", icon: Crosshair },
+  { value: "won", label: "Won", icon: Trophy },
+  { value: "passed", label: "Passed", icon: XCircle },
   { value: "dismissed", label: "Dismiss", icon: Ban, destructive: true },
 ];
 
@@ -229,6 +241,10 @@ export function ProjectDetailPage() {
   const [contactsOpen, setContactsOpen] = useState(false);
   const [savingStatus, setSavingStatus] = useState<StatusValue | null>(null);
   const [confirmDismiss, setConfirmDismiss] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [notesState, setNotesState] = useState<"idle" | "saving" | "saved">("idle");
+  // Last notes value persisted to the server — avoids redundant saves on blur.
+  const savedNotesRef = useRef("");
 
   const loadProject = useCallback(async () => {
     setLoading(true);
@@ -236,6 +252,8 @@ export function ProjectDetailPage() {
     try {
       const p = await getProject(id);
       setProject(p);
+      setNotes(p.notes ?? "");
+      savedNotesRef.current = p.notes ?? "";
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load project.");
     } finally {
@@ -261,7 +279,7 @@ export function ProjectDetailPage() {
   const applyStatus = async (status: StatusValue) => {
     setSavingStatus(status);
     try {
-      const updated = await patchProjectStatus(id, status);
+      const updated = await patchProject(id, { status });
       const nextStatus = updated?.status ?? status;
       setProject((prev) => (prev ? { ...prev, status: nextStatus } : prev));
     } catch (e) {
@@ -279,6 +297,24 @@ export function ProjectDetailPage() {
       void applyStatus(status);
     }
   };
+
+  // Autosave notes on blur (skips when unchanged from the last persisted value).
+  const saveNotes = useCallback(async () => {
+    if (notes === savedNotesRef.current) return;
+    const value = notes;
+    setNotesState("saving");
+    try {
+      const updated = await patchProject(id, { notes: value });
+      const nextNotes = updated?.notes ?? value;
+      savedNotesRef.current = nextNotes;
+      setProject((prev) => (prev ? { ...prev, notes: nextNotes } : prev));
+      setNotesState("saved");
+      window.setTimeout(() => setNotesState("idle"), 1800);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save notes.");
+      setNotesState("idle");
+    }
+  }, [id, notes]);
 
   if (loading) return <DetailSkeleton />;
 
@@ -493,6 +529,34 @@ export function ProjectDetailPage() {
               ) : (
                 <p className="text-sm text-fg/70">No summary available yet.</p>
               )}
+            </section>
+
+            <section className="rounded-lg border border-border bg-surface p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-fg">
+                  <StickyNote className="h-4 w-4" aria-hidden="true" />
+                  Notes
+                </h2>
+                {notesState === "saving" ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-fg/60">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    Saving…
+                  </span>
+                ) : notesState === "saved" ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-primary">
+                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                    Saved
+                  </span>
+                ) : null}
+              </div>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                onBlur={() => void saveNotes()}
+                rows={4}
+                placeholder="Private notes for this project (saves when you click away)…"
+                className="w-full resize-y rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg/40 focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
             </section>
 
             <section className="rounded-lg border border-border bg-surface p-4">

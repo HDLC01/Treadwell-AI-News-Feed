@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, Link } from "react-router-dom";
-import { Radar, Menu, X } from "lucide-react";
+import { Radar, Menu, X, Target } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import type { Theme } from "../lib/theme";
 
@@ -9,15 +10,23 @@ interface Props {
   onToggleTheme: () => void;
 }
 
-const NAV = [
+interface NavItem {
+  to: string;
+  label: string;
+  end: boolean;
+  icon?: LucideIcon;
+}
+
+const NAV: NavItem[] = [
   { to: "/", label: "Feed", end: true },
+  { to: "/pipeline", label: "Pipeline", end: false, icon: Target },
   { to: "/digests", label: "Digests", end: false },
   { to: "/admin", label: "Admin", end: false },
 ];
 
 function navClass({ isActive }: { isActive: boolean }): string {
   return [
-    "rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 cursor-pointer",
+    "inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 cursor-pointer",
     isActive
       ? "bg-primary text-primary-fg"
       : "text-fg hover:bg-muted",
@@ -50,11 +59,15 @@ export default function TopBar({ theme, onToggleTheme }: Props) {
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
-          {NAV.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
-              {item.label}
-            </NavLink>
-          ))}
+          {NAV.map((item) => {
+            const Icon = item.icon;
+            return (
+              <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
+                {Icon && <Icon className="h-4 w-4" aria-hidden="true" />}
+                {item.label}
+              </NavLink>
+            );
+          })}
         </nav>
 
         <div className="flex items-center gap-2">
@@ -82,17 +95,21 @@ export default function TopBar({ theme, onToggleTheme }: Props) {
           aria-label="Mobile"
         >
           <div className="flex flex-col gap-1">
-            {NAV.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                onClick={() => setMenuOpen(false)}
-                className={navClass}
-              >
-                {item.label}
-              </NavLink>
-            ))}
+            {NAV.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  onClick={() => setMenuOpen(false)}
+                  className={navClass}
+                >
+                  {Icon && <Icon className="h-4 w-4" aria-hidden="true" />}
+                  {item.label}
+                </NavLink>
+              );
+            })}
           </div>
         </nav>
       )}

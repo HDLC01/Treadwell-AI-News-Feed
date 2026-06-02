@@ -183,6 +183,8 @@ export const STATUS_LABELS: Record<ProjectStatus, string> = {
   active: "Active",
   watching: "Watching",
   pursuing: "Pursuing",
+  won: "Won",
+  passed: "Passed",
   archived: "Archived",
   dismissed: "Dismissed",
 };
