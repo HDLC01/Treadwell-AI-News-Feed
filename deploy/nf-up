@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Bring the Treadwell News Feed back online.
+cd /opt/treadwell-newsfeed && docker compose up -d
+echo ">>> Treadwell News Feed is STARTING (~10s to healthy). Check it with:  nf-status"

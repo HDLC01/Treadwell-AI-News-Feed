@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# EMERGENCY: take the Treadwell News Feed offline right now.
+cd /opt/treadwell-newsfeed && docker compose stop
+echo ">>> Treadwell News Feed STOPPED — newsfeed.wetreadwell.com is OFFLINE. Bring it back with:  nf-up"

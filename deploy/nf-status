@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+cd /opt/treadwell-newsfeed && docker compose ps
+echo "--- health ---"
+curl -s -o /dev/null -w "api/health: %{http_code}\n" http://127.0.0.1:8890/api/health || echo "api: DOWN (container stopped?)"
