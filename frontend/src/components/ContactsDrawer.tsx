@@ -9,6 +9,7 @@ import {
   Building2,
   Lock,
   Link as LinkIcon,
+  Linkedin,
   ShieldCheck,
   Ban,
   Loader2,
@@ -144,6 +145,29 @@ function ContactRow({ contact }: { contact: Contact }) {
               >
                 <Phone className="h-3.5 w-3.5" aria-hidden="true" />
                 {contact.phone}
+              </a>
+            ) : null}
+            {contact.linkedin_url ? (
+              <a
+                href={contact.linkedin_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-fit cursor-pointer items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+              >
+                <Linkedin className="h-3.5 w-3.5" aria-hidden="true" />
+                LinkedIn profile
+              </a>
+            ) : contact.full_name ? (
+              <a
+                href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
+                  [contact.full_name, contact.company_name].filter(Boolean).join(" "),
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-fit cursor-pointer items-center gap-1.5 text-xs font-medium text-fg/60 hover:text-primary hover:underline"
+              >
+                <Linkedin className="h-3.5 w-3.5" aria-hidden="true" />
+                Find on LinkedIn
               </a>
             ) : null}
           </div>

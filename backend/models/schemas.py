@@ -105,6 +105,7 @@ class Contact(BaseModel):
     contact_kind: str = "named_person"
     source: Optional[str] = None
     source_url: Optional[str] = None
+    linkedin_url: Optional[str] = None
     verified: bool = False
     do_not_contact: bool = False
 

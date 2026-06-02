@@ -70,6 +70,7 @@ def get_project_contacts(
                 contact_kind=r.get("contact_kind", "named_person"),
                 source=r.get("source"),
                 source_url=r.get("source_url"),
+                linkedin_url=r.get("linkedin_url"),
                 verified=bool(r.get("verified")),
                 do_not_contact=bool(r.get("do_not_contact")),
             )

@@ -113,6 +113,10 @@ def run_pipeline(trigger: str = "scheduled") -> dict:
                 # Stage 6/7: score + persist
                 _score_and_persist(project_id, relevance_scorer)
 
+                # Stage 4b: contacts — article contacts always; scrape company sites
+                # only for in-radius projects (bounds the scraping/Claude load).
+                _enrich_contacts(project_id, signal_id, cand.get("signal_type", "news"), extracted)
+
             except Exception as exc:  # noqa: BLE001 — one bad signal never aborts the run
                 errors.append({"stage": "signal", "url": cand.get("url"), "error": str(exc)})
                 log.warning("Signal failed (%s): %s", cand.get("url"), exc)
@@ -304,6 +308,24 @@ def _enrich_team(project_id: str, signal_id: str, extracted: dict) -> None:
         team_enricher.recompute_team_confidence(project_id)
     except Exception as exc:  # noqa: BLE001
         log.warning("recompute_team_confidence failed on %s: %s", project_id, exc)
+
+
+# ─── Stage 4b helper (contacts) ─────────────────────────────────────────────
+def _enrich_contacts(project_id: str, signal_id: str, signal_type: str, extracted: dict) -> None:
+    from services import contacts_enricher
+
+    web = _is_in_radius(project_id)  # only scrape company sites for in-radius opportunities
+    try:
+        contacts_enricher.enrich_project_contacts(project_id, signal_id, signal_type, extracted, web=web)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("contacts enrich failed on %s: %s", project_id, exc)
+
+
+def _is_in_radius(project_id: str) -> bool:
+    rows = with_supabase_retry(
+        lambda: get_supabase().table("projects").select("in_radius").eq("id", project_id).limit(1).execute().data
+    ) or []
+    return bool(rows and rows[0].get("in_radius"))
 
 
 # ─── Stage 5 helper ────────────────────────────────────────────────────────

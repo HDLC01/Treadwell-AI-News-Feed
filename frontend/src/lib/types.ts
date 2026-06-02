@@ -157,6 +157,7 @@ export interface Contact {
   contact_kind: ContactKind;
   source: string | null;
   source_url: string | null;
+  linkedin_url: string | null;
   verified: boolean;
   do_not_contact: boolean;
 }
