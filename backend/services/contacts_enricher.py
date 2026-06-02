@@ -82,33 +82,78 @@ def _primary_company_id(project_id: str) -> Optional[str]:
 
 def _existing_contacts(project_id: str) -> list[dict]:
     return with_supabase_retry(
-        lambda: get_supabase().table("contacts").select("id, full_name, email, source").eq("project_id", project_id).execute().data
+        lambda: get_supabase()
+        .table("contacts")
+        .select("id, full_name, email, phone, title, linkedin_url, source, contact_kind")
+        .eq("project_id", project_id)
+        .execute()
+        .data
     ) or []
 
 
-def _contact_exists(existing: list[dict], email, full_name) -> bool:
-    e = (email or "").lower().strip()
-    fn = (full_name or "").lower().strip()
-    for c in existing:
-        if e and (c.get("email") or "").lower().strip() == e:
-            return True
-        if fn and not e and (c.get("full_name") or "").lower().strip() == fn:
-            return True
-    return False
+def _norm(s) -> str:
+    return (s or "").lower().strip()
+
+
+def _find_match(existing: list[dict], email, full_name) -> Optional[dict]:
+    """Find an existing contact for the same person — by email, else by name."""
+    e, fn = _norm(email), _norm(full_name)
+    if e:
+        for c in existing:
+            if _norm(c.get("email")) == e:
+                return c
+    if fn:
+        for c in existing:
+            # match a named person by name when we don't have a conflicting email
+            if _norm(c.get("full_name")) == fn and (not e or not c.get("email")):
+                return c
+    return None
 
 
 def _has_website_contacts(existing: list[dict]) -> bool:
     return any((c.get("source") or "") == "company_website" for c in existing)
 
 
-def _insert_contact(project_id, company_id, full_name, title, email, phone, kind, source, source_url, linkedin) -> None:
+def _insert_contact(project_id, company_id, full_name, title, email, phone, kind, source, source_url, linkedin) -> Optional[str]:
     row = {
         "project_id": project_id, "company_id": company_id, "full_name": full_name,
         "title": title, "email": email, "phone": phone, "contact_kind": kind,
         "source": source, "source_url": source_url, "linkedin_url": linkedin,
     }
     row = {k: v for k, v in row.items() if v is not None}
-    with_supabase_retry(lambda: get_supabase().table("contacts").insert(row).execute())
+    res = with_supabase_retry(lambda: get_supabase().table("contacts").insert(row).execute().data) or []
+    return res[0]["id"] if res else None
+
+
+def _upsert_contact(existing, project_id, company_id, full_name, title, email, phone, kind, source, source_url, linkedin) -> str:
+    """Insert a contact, or — if the same person already exists — FILL IN only the
+    fields that are currently missing (never overwrite). Returns inserted/updated/skipped."""
+    m = _find_match(existing, email, full_name)
+    if m:
+        patch = {}
+        if email and not m.get("email"):
+            patch["email"] = email
+        if phone and not m.get("phone"):
+            patch["phone"] = phone
+        if title and not m.get("title"):
+            patch["title"] = title
+        if linkedin and not m.get("linkedin_url"):
+            patch["linkedin_url"] = linkedin
+        if full_name and not m.get("full_name"):
+            patch["full_name"] = full_name
+            patch["contact_kind"] = "named_person"
+        if patch and m.get("id"):
+            cid = m["id"]
+            with_supabase_retry(lambda: get_supabase().table("contacts").update(patch).eq("id", cid).execute())
+            m.update(patch)
+            return "updated"
+        return "skipped"
+    new_id = _insert_contact(project_id, company_id, full_name, title, email, phone, kind, source, source_url, linkedin)
+    existing.append({
+        "id": new_id, "full_name": full_name, "email": email, "phone": phone,
+        "title": title, "linkedin_url": linkedin, "source": source, "contact_kind": kind,
+    })
+    return "inserted"
 
 
 def _kind(full_name, email) -> str:
@@ -150,11 +195,8 @@ def persist_article_contacts(project_id: str, signal_id: str, signal_type: str, 
         title = (c.get("title") or "").strip() or None
         if not (full_name or email or phone):
             continue
-        if _contact_exists(existing, email, full_name):
-            continue
-        _insert_contact(project_id, primary, full_name, title, email, phone, _kind(full_name, email), src, None, None)
-        existing.append({"full_name": full_name, "email": email})
-        n += 1
+        if _upsert_contact(existing, project_id, primary, full_name, title, email, phone, _kind(full_name, email), src, None, None) != "skipped":
+            n += 1
     return n
 
 
@@ -256,13 +298,10 @@ def _scrape_company(project_id: str, co: dict, site: str, existing: list[dict]) 
     inserted = 0
     company_li = next(iter(linkedin), None)  # attach a found company LinkedIn to the first inbox
     for e, src_url in emails.items():
-        if _contact_exists(existing, e, None):
-            continue
         local = e.split("@")[0].lower()
         kind = "general_inbox" if local in _GENERIC_LOCAL else "named_person"
-        _insert_contact(project_id, company_id, None, None, e, None, kind, "company_website", src_url, company_li)
-        existing.append({"email": e})
-        inserted += 1
+        if _upsert_contact(existing, project_id, company_id, None, None, e, None, kind, "company_website", src_url, company_li) != "skipped":
+            inserted += 1
         company_li = None
 
     # Named people via one Claude pass over the richest page.
@@ -282,15 +321,12 @@ def _scrape_company(project_id: str, co: dict, site: str, existing: list[dict]) 
                 if not fn:
                     continue
                 em = (p.get("email") or "").strip() or None
-                if _contact_exists(existing, em, fn):
-                    continue
                 li = (p.get("linkedin") or "").strip() or None
-                _insert_contact(
-                    project_id, company_id, fn, (p.get("title") or "").strip() or None, em, None,
+                if _upsert_contact(
+                    existing, project_id, company_id, fn, (p.get("title") or "").strip() or None, em, None,
                     "named_person", "company_website", best[0], li,
-                )
-                existing.append({"full_name": fn, "email": em})
-                inserted += 1
+                ) != "skipped":
+                    inserted += 1
     return inserted
 
 
