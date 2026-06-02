@@ -462,9 +462,29 @@ def get_stats() -> Stats:
     except Exception:  # noqa: BLE001
         rows = []
 
-    from datetime import date as _date
+    from datetime import datetime as _dt, timezone as _utc
 
-    today = _date.today().isoformat()
+    # "Today" = Kyle's day (US Central / PIPELINE_TZ), NOT the UTC host day.
+    # Stored timestamps are UTC ISO, so convert each to Central before comparing.
+    try:
+        from zoneinfo import ZoneInfo
+
+        _tz = ZoneInfo(getattr(settings, "PIPELINE_TZ", "America/Chicago"))
+    except Exception:  # noqa: BLE001
+        _tz = _utc
+    _today_central = _dt.now(_tz).date()
+
+    def _is_today_central(iso) -> bool:
+        if not iso:
+            return False
+        try:
+            d = _dt.fromisoformat(str(iso).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return False
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=_utc)
+        return d.astimezone(_tz).date() == _today_central
+
     visible = [r for r in rows if (r.get("status") or "") not in ("archived", "dismissed")]
     return Stats(
         total=len(visible),
@@ -472,8 +492,8 @@ def get_stats() -> Stats:
         today=sum(
             1
             for r in visible
-            if (r.get("first_seen_at") or "").startswith(today)
-            or (r.get("last_signal_at") or "").startswith(today)
+            if _is_today_central(r.get("first_seen_at"))
+            or _is_today_central(r.get("last_signal_at"))
         ),
         hot=sum(1 for r in visible if (r.get("relevance_tier") or "") == "hot"),
         in_radius=sum(1 for r in visible if r.get("in_radius")),

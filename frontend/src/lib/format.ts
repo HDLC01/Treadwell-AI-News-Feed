@@ -16,6 +16,32 @@ import type {
 
 const EMPTY = "—";
 
+// Treadwell's home timezone (US Central). Every human-facing calendar date is
+// pinned to Central so all viewers — including UTC+8 — see the same day Kyle
+// does, not their own local day. Internal elapsed-time math (ms diffs) is
+// timezone-agnostic and needs no pinning.
+const CENTRAL_TZ = "America/Chicago";
+
+/** A date's YYYY-MM-DD on the US Central calendar. */
+export function centralYMD(d: Date): string {
+  // en-CA renders ISO-style YYYY-MM-DD.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: CENTRAL_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+/** Whole-day difference (a − b) measured on the US Central calendar. */
+export function centralDayDiff(a: Date, b: Date): number {
+  const [ay, am, ad] = centralYMD(a).split("-").map(Number);
+  const [by, bm, bd] = centralYMD(b).split("-").map(Number);
+  return Math.round(
+    (Date.UTC(ay, am - 1, ad) - Date.UTC(by, bm - 1, bd)) / 86_400_000,
+  );
+}
+
 /** Great-circle distance in miles, e.g. "47 mi" / "312 mi". */
 export function miles(n: number | null | undefined): string {
   if (n === null || n === undefined || Number.isNaN(n)) return EMPTY;
@@ -67,11 +93,14 @@ export function relativeDate(iso: string | null | undefined): string {
   if (diffDay < 7) return `${diffDay}d ago`;
   if (diffDay < 30) return `${Math.round(diffDay / 7)}w ago`;
 
-  // Older than a month: absolute date.
+  // Older than a month: absolute date, pinned to US Central (Kyle's day).
+  const sameYear =
+    centralYMD(then).slice(0, 4) === centralYMD(new Date()).slice(0, 4);
   return then.toLocaleDateString("en-US", {
+    timeZone: CENTRAL_TZ,
     month: "short",
     day: "numeric",
-    year: then.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    year: sameYear ? undefined : "numeric",
   });
 }
 
@@ -81,6 +110,7 @@ export function absoluteDate(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return EMPTY;
   return d.toLocaleDateString("en-US", {
+    timeZone: CENTRAL_TZ,
     month: "short",
     day: "numeric",
     year: "numeric",

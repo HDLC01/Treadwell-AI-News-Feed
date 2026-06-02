@@ -35,9 +35,9 @@ function formatDate(iso: string | null | undefined): string {
   if (Number.isNaN(d.getTime())) {
     const d2 = new Date(iso);
     if (Number.isNaN(d2.getTime())) return iso;
-    return d2.toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "long", day: "numeric" });
+    return d2.toLocaleDateString("en-US", { weekday: "short", year: "numeric", month: "long", day: "numeric" });
   }
-  return d.toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "long", day: "numeric" });
+  return d.toLocaleDateString("en-US", { weekday: "short", year: "numeric", month: "long", day: "numeric" });
 }
 
 function DigestListSkeleton() {

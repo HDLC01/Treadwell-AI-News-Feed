@@ -7,6 +7,7 @@ import Pagination from "../components/Pagination";
 import EmptyState from "../components/EmptyState";
 import { ProjectGridSkeleton } from "../components/Skeleton";
 import { getProjects, getStats, ApiError } from "../lib/api";
+import { centralDayDiff } from "../lib/format";
 import type {
   Paginated,
   ProjectSummary,
@@ -20,22 +21,15 @@ const VALID_SORTS: ProjectSort[] = ["relevance", "distance", "recent"];
 type DateBucket = "Today" | "Yesterday" | "This week" | "Older";
 const BUCKET_ORDER: DateBucket[] = ["Today", "Yesterday", "This week", "Older"];
 
-// Bucket a project by its last_signal_at, relative to the start of today.
-// Missing/unparseable dates fall to "Older".
+// Bucket a project by its last_signal_at, relative to the start of today —
+// measured on the US Central calendar so every viewer (incl. UTC+8) sees Kyle's
+// buckets, not their own local day's. Missing/unparseable dates fall to "Older".
 function dateBucket(iso: string | null | undefined): DateBucket {
   if (!iso) return "Older";
   const then = new Date(iso);
   if (Number.isNaN(then.getTime())) return "Older";
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const startOfThen = new Date(then);
-  startOfThen.setHours(0, 0, 0, 0);
-
-  const dayMs = 86_400_000;
-  const diffDays = Math.round(
-    (startOfToday.getTime() - startOfThen.getTime()) / dayMs,
-  );
+  const diffDays = centralDayDiff(new Date(), then);
 
   if (diffDays <= 0) return "Today";
   if (diffDays === 1) return "Yesterday";

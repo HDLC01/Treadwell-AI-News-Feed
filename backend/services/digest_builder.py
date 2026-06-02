@@ -79,16 +79,24 @@ def _public_base_url() -> str:
 def build_digest(for_date: date) -> dict:
     """Build the digest dict for `for_date`. Reads projects from Supabase.
 
-    Selection: in_radius, tier in (hot, warm), and either first_seen_at OR
-    last_signal_at falls on for_date. Ordering: data centers first, then by
-    relevance_score desc. Splits new vs updated by first_seen_at == for_date.
+    `for_date` MUST be the LOCAL (Central) calendar date — the selection window
+    and the new/updated split are both computed in that timezone.
+
+    Selection: in_radius, tier in (hot, warm), and last_signal_at falls within
+    the Central day. Ordering: data centers first, then by relevance_score desc.
+    Splits new vs updated by whether first_seen_at is on for_date (Central).
     """
     if isinstance(for_date, datetime):
         for_date = for_date.date()
-    day_start = datetime(for_date.year, for_date.month, for_date.day, tzinfo=timezone.utc)
     next_day = _add_one_day(for_date)
-    lo = day_start.isoformat()
-    hi = datetime(next_day.year, next_day.month, next_day.day, tzinfo=timezone.utc).isoformat()
+    # for_date is the LOCAL (Central) calendar day. Build the selection window as
+    # Central midnight .. next Central midnight, converted to UTC, so it matches
+    # the UTC-stored last_signal_at against Kyle's day — not the UTC host day.
+    from datetime import time as _time
+
+    _tz = _local_tz()
+    lo = datetime.combine(for_date, _time(), _tz).astimezone(timezone.utc).isoformat()
+    hi = datetime.combine(next_day, _time(), _tz).astimezone(timezone.utc).isoformat()
 
     # Pull candidate in-radius hot/warm projects active in the window.
     rows = with_supabase_retry(
@@ -289,12 +297,27 @@ def _add_one_day(d: date) -> date:
     return d + timedelta(days=1)
 
 
+def _local_tz():
+    """Pipeline's local timezone (America/Chicago by default); UTC if unresolved."""
+    try:
+        from zoneinfo import ZoneInfo
+        from config import settings
+
+        return ZoneInfo(getattr(settings, "PIPELINE_TZ", "America/Chicago"))
+    except Exception:  # noqa: BLE001
+        return timezone.utc
+
+
 def _on_date(iso: Optional[str], target: date) -> bool:
+    """True if UTC-stored timestamp `iso` falls on `target` in LOCAL (Central)
+    time. `target` is a Central calendar date, so compare in Central, not UTC."""
     if not iso:
         return False
     try:
         dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
-        return dt.date() == target
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(_local_tz()).date() == target
     except (ValueError, TypeError):
         return False
 

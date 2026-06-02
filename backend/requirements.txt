@@ -10,6 +10,9 @@ uvicorn[standard]==0.34.0
 pydantic==2.10.4
 pydantic-settings==2.7.1
 python-multipart==0.0.20
+# tzdata: bundle the IANA tz database so ZoneInfo("America/Chicago") resolves
+# even on a minimal base image — keeps every human-facing date pinned to Central.
+tzdata>=2024.1
 
 # ─── Database (lazy: only imported when Supabase is configured) ───────────
 supabase==2.11.0

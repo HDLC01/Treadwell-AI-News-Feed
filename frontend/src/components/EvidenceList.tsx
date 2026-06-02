@@ -49,7 +49,8 @@ function formatDate(iso: string | null | undefined): string {
   if (!iso) return "Date unknown";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "Date unknown";
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString("en-US", {
+    timeZone: "America/Chicago",
     year: "numeric",
     month: "short",
     day: "numeric",
