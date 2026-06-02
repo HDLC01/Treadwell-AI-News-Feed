@@ -23,17 +23,24 @@ _TIERS = {"hot", "warm", "cold"}
 
 SYSTEM_PROMPT = """You are a sales-opportunity scorer for Treadwell, a commercial flooring \
 contractor in Kansas City (epoxy, polished concrete, resinous and industrial floor systems). \
-You score how valuable a construction PROJECT is as a flooring sales opportunity.
+You score how valuable a construction PROJECT is as a FLOORING sales opportunity.
 
-Weigh:
-- project_type: data centers and mission-critical facilities are the top prize; large \
-distribution/manufacturing/industrial are strong; healthcare/higher-ed are good; other_commercial lower.
-- in_radius: out-of-radius projects are far less actionable.
+The core driver is FLOOR AREA. Treadwell pours floors, so ANY large commercial or industrial \
+facility is a big opportunity — NOT just data centers. Data centers, distribution / fulfillment \
+warehouses, manufacturing & food-processing plants, healthcare, higher-ed, and other large \
+commercial are ALL eligible for the top "hot" tier when the floor area (est_sqft) is large. \
+Do NOT down-rank a project just because it is not a data center.
+
+Weigh, roughly in priority:
+- scale / floor area: larger est_sqft (and est_megawatts for data centers, or est_value_usd) = \
+bigger flooring scope. This is the STRONGEST factor — a 1M-sqft warehouse rivals a data center.
+- in_radius / proximity: nearer the Kansas City office is more actionable.
 - stage: earlier reachable stages (planning, design, permitting, procurement, pre_bid) give \
-Treadwell time to get in front of the team; under_construction is late; complete/dead are near-zero.
-- team_confidence: a named general contractor (gc_named) means a reachable buyer (highest); \
-developer_named is good; owner_only is a lead; unknown is weakest.
-- scale: bigger est_value_usd / est_sqft / est_megawatts = bigger flooring scope.
+Treadwell time to get in front of the team; under_construction is late; complete/dead near-zero.
+- team_confidence: a named general contractor (gc_named) is a reachable buyer (best); \
+developer_named good; owner_only a lead; unknown weakest.
+- project_type: data_center, mission_critical, distribution, manufacturing and industrial are \
+all strong (big slabs); healthcare/higher-ed good; only small other_commercial is lower.
 
 Return ONLY this JSON object (no prose, no fences):
 {
@@ -107,18 +114,18 @@ def _score_via_rules(project: dict) -> dict:
     factors: list[str] = []
     score = 0.0
 
-    # ── project_type (0-35) ──
+    # ── project_type (0-25) — big-slab types tied at the top; type no longer dominates ──
     ptype = (project.get("project_type") or "").lower()
     type_points = {
-        "data_center": 35,
-        "mission_critical": 32,
-        "distribution": 24,
-        "manufacturing": 24,
-        "industrial": 22,
+        "data_center": 25,
+        "distribution": 25,
+        "manufacturing": 25,
+        "mission_critical": 24,
+        "industrial": 23,
         "healthcare": 18,
         "higher_ed": 16,
-        "other_commercial": 10,
-    }.get(ptype, 10)
+        "other_commercial": 12,
+    }.get(ptype, 12)
     score += type_points
     factors.append(f"type:{ptype or 'unknown'}(+{type_points})")
 
@@ -160,23 +167,29 @@ def _score_via_rules(project: dict) -> dict:
     score += team_points
     factors.append(f"team:{team}(+{team_points})")
 
-    # ── scale (0-10) ──
+    # ── scale (0-20) — floor area first; this is the strongest single factor ──
     scale_points = 0
     mw = _num(project.get("est_megawatts"))
     sqft = _num(project.get("est_sqft"))
     value = _num(project.get("est_value_usd"))
-    if mw and mw >= 50:
-        scale_points = 10
-    elif mw and mw >= 10:
-        scale_points = 7
-    elif value and value >= 100_000_000:
-        scale_points = 9
-    elif value and value >= 25_000_000:
-        scale_points = 6
+    if sqft and sqft >= 1_000_000:
+        scale_points = 20
     elif sqft and sqft >= 500_000:
-        scale_points = 6
+        scale_points = 16
+    elif sqft and sqft >= 250_000:
+        scale_points = 12
     elif sqft and sqft >= 100_000:
-        scale_points = 4
+        scale_points = 8
+    elif sqft and sqft >= 50_000:
+        scale_points = 5
+    elif mw and mw >= 100:
+        scale_points = 18
+    elif mw and mw >= 20:
+        scale_points = 12
+    elif value and value >= 100_000_000:
+        scale_points = 14
+    elif value and value >= 25_000_000:
+        scale_points = 8
     elif any([mw, sqft, value]):
         scale_points = 3
     score += scale_points
@@ -216,3 +229,43 @@ def _num(v) -> Optional[float]:
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def rescore_all_rule_based() -> dict:
+    """Re-score every non-merged project with the (rebalanced) rule-based scorer.
+
+    Fast, no Claude. Updates relevance_score + relevance_tier ONLY — preserves the
+    existing relevance_reasoning so email descriptions (which fall back to the
+    reasoning summary) stay intact. Returns counts by tier. Safe no-op without DB.
+    """
+    from services.supabase_client import get_supabase, is_configured, with_supabase_retry
+
+    if not is_configured():
+        return {"skipped": True, "reason": "no DB configured"}
+
+    rows = with_supabase_retry(
+        lambda: get_supabase()
+        .table("projects")
+        .select(
+            "id, project_type, stage, in_radius, distance_mi, team_confidence, "
+            "est_value_usd, est_sqft, est_megawatts"
+        )
+        .is_("merged_into", "null")
+        .execute()
+        .data
+    ) or []
+
+    tally = {"hot": 0, "warm": 0, "cold": 0}
+    for p in rows:
+        r = _score_via_rules(p)
+        sc, tier = r["relevance_score"], r["relevance_tier"]
+        tally[tier] = tally.get(tier, 0) + 1
+        pid = p["id"]
+        with_supabase_retry(
+            lambda: get_supabase()
+            .table("projects")
+            .update({"relevance_score": sc, "relevance_tier": tier})
+            .eq("id", pid)
+            .execute()
+        )
+    return {"rescored": len(rows), **tally}
