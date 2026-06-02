@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, Link } from "react-router-dom";
-import { Radar, Menu, X, Target } from "lucide-react";
+import { Radar, Menu, X, Target, Map } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import type { Theme } from "../lib/theme";
@@ -20,6 +20,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/", label: "Feed", end: true },
   { to: "/pipeline", label: "Pipeline", end: false, icon: Target },
+  { to: "/map", label: "Map", end: false, icon: Map },
   { to: "/digests", label: "Digests", end: false },
   { to: "/admin", label: "Admin", end: false },
 ];

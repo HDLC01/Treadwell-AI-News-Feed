@@ -200,6 +200,29 @@ export interface Stats {
   data_centers: number;
 }
 
+// ---- Radar map (GET /api/config, GET /api/map-points) ----
+
+export interface RadarConfig {
+  kc_lat: number;
+  kc_lon: number;
+  data_center_radius_mi: number;
+  other_radius_mi: number;
+}
+
+export interface MapPoint {
+  id: string;
+  title: string;
+  latitude: number;
+  longitude: number;
+  relevance_tier: RelevanceTier | null;
+  project_type: string;
+  within_70mi: boolean | null;
+  distance_mi: number | null;
+  city: string | null;
+  state: string | null;
+  status: string;
+}
+
 // ---- Paginated list envelope (GET /api/projects) ----
 
 export interface Paginated<T> {

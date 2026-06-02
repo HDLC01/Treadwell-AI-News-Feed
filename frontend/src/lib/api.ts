@@ -6,12 +6,14 @@ import type {
   Contact,
   DigestDetail,
   DigestSummary,
+  MapPoint,
   Paginated,
   PipelineRun,
   ProjectDetail,
   ProjectQuery,
   ProjectStatus,
   ProjectSummary,
+  RadarConfig,
   Signal,
   Stats,
 } from "./types";
@@ -148,6 +150,18 @@ export function mergeProject(
 
 export function getStats(): Promise<Stats> {
   return request<Stats>("/api/stats");
+}
+
+// ---- Radar map ----
+
+/** Office anchor + service radii for the Radar map. (GET /api/config) */
+export function getConfig(): Promise<RadarConfig> {
+  return request<RadarConfig>("/api/config");
+}
+
+/** All plottable projects (only points with coordinates). (GET /api/map-points) */
+export function getMapPoints(): Promise<MapPoint[]> {
+  return request<MapPoint[]>("/api/map-points");
 }
 
 // ---- Digests ----

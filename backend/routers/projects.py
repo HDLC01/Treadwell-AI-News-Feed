@@ -393,6 +393,56 @@ def merge_project(project_id: str, body: MergeRequest) -> MergeResponse:
     return MergeResponse(ok=True, merged_into=body.target_id)
 
 
+@router.get("/map-points")
+def map_points() -> List[Dict[str, Any]]:
+    """Geo points for the Radar map: non-merged, not archived/dismissed, with coordinates."""
+    def _pt(r: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "id": r.get("id"),
+            "title": r.get("title"),
+            "latitude": r.get("latitude"),
+            "longitude": r.get("longitude"),
+            "relevance_tier": r.get("relevance_tier"),
+            "project_type": r.get("project_type"),
+            "within_70mi": _within_70(r.get("distance_mi")),
+            "distance_mi": r.get("distance_mi"),
+            "city": r.get("city"),
+            "state": r.get("state"),
+            "status": r.get("status", "new"),
+        }
+
+    if settings.demo_mode:
+        from services import fixtures
+
+        filt = {
+            "q": None, "project_type": None, "stage": None, "in_radius": None,
+            "tier": None, "team_confidence": None, "status": None,
+            "sort": "relevance", "page": 1, "page_size": 1000,
+        }
+        out = []
+        for item in fixtures.list_projects(filt).get("items", []):
+            d = fixtures.get_project(item["id"]) or {}
+            if d.get("latitude") is not None and d.get("longitude") is not None:
+                out.append(_pt(d))
+        return out
+
+    try:
+        rows = _retry(
+            lambda: _sb()
+            .table("projects")
+            .select("id,title,latitude,longitude,relevance_tier,project_type,distance_mi,city,state,status")
+            .is_("merged_into", "null")
+            .not_.in_("status", ["archived", "dismissed"])
+            .not_.is_("latitude", "null")
+            .limit(2000)
+            .execute()
+            .data
+        ) or []
+    except Exception:  # noqa: BLE001
+        rows = []
+    return [_pt(r) for r in rows if r.get("latitude") is not None and r.get("longitude") is not None]
+
+
 @router.get("/stats", response_model=Stats)
 def get_stats() -> Stats:
     """Top-of-feed summary counters."""

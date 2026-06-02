@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     # ─── Contacts gate ───────────────────────────────────────────────────
     CONTACTS_GATE_PASSWORD: str = ""
 
+    # ─── Search API (resolve real LinkedIn profile URLs — NOT scraping LinkedIn) ─
+    # provider: "brave" (api.search.brave.com, generous free tier) or "serpapi".
+    # Leave SEARCH_API_KEY blank to disable LinkedIn resolution (a search link still shows).
+    SEARCH_API_PROVIDER: str = "brave"
+    SEARCH_API_KEY: str = ""
+
     # ─── URLs / CORS ─────────────────────────────────────────────────────
     PUBLIC_BASE_URL: str = "https://newsfeed.wetreadwell.com"
     CORS_ORIGINS: Union[str, List[str]] = "*"

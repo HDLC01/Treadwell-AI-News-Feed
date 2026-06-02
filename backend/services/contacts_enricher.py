@@ -53,6 +53,56 @@ def _ua() -> str:
         return "treadwell-newsfeed/1.0 (hanz@wetreadwell.com)"
 
 
+def _search_cfg() -> tuple[str, str]:
+    try:
+        from config import settings
+
+        return (getattr(settings, "SEARCH_API_PROVIDER", "brave") or "brave"), (getattr(settings, "SEARCH_API_KEY", "") or "")
+    except Exception:  # noqa: BLE001
+        return "brave", ""
+
+
+def resolve_linkedin(full_name: Optional[str], company_name: Optional[str] = None) -> Optional[str]:
+    """Resolve a person's public LinkedIn profile URL via a SEARCH API (Brave/SerpAPI).
+
+    This reads a search engine's public results — it does NOT scrape LinkedIn. Returns
+    None if no SEARCH_API_KEY is set, the query errors, or no linkedin.com/in/ hit is found.
+    """
+    provider, key = _search_cfg()
+    if not key or not full_name:
+        return None
+    q = f'site:linkedin.com/in "{full_name}"' + (f" {company_name}" if company_name else "")
+    try:
+        import httpx  # lazy
+
+        if provider == "serpapi":
+            r = httpx.get(
+                "https://serpapi.com/search.json",
+                params={"q": q, "engine": "google", "num": 5, "api_key": key},
+                timeout=20,
+            )
+            r.raise_for_status()
+            for it in (r.json().get("organic_results") or []):
+                u = it.get("link", "")
+                if "linkedin.com/in/" in u:
+                    return u.split("?")[0]
+        else:  # brave
+            r = httpx.get(
+                "https://api.search.brave.com/res/v1/web/search",
+                params={"q": q, "count": 5},
+                headers={"X-Subscription-Token": key, "Accept": "application/json"},
+                timeout=20,
+            )
+            r.raise_for_status()
+            for it in ((r.json().get("web") or {}).get("results") or []):
+                u = it.get("url", "")
+                if "linkedin.com/in/" in u:
+                    return u.split("?")[0]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("linkedin resolve failed for %r: %s", full_name, exc)
+    return None
+
+
 # ─── DB helpers ───────────────────────────────────────────────────────────
 def _team_companies(project_id: str) -> list[dict]:
     rows = with_supabase_retry(
@@ -322,6 +372,8 @@ def _scrape_company(project_id: str, co: dict, site: str, existing: list[dict]) 
                     continue
                 em = (p.get("email") or "").strip() or None
                 li = (p.get("linkedin") or "").strip() or None
+                if not li:
+                    li = resolve_linkedin(fn, co.get("name"))
                 if _upsert_contact(
                     existing, project_id, company_id, fn, (p.get("title") or "").strip() or None, em, None,
                     "named_person", "company_website", best[0], li,
@@ -376,6 +428,43 @@ def backfill_web_top(n: int = 12) -> dict:
         except Exception as exc:  # noqa: BLE001
             log.warning("web backfill failed on %s: %s", r["id"], exc)
     return {"projects": len(rows), "web_contacts_inserted": total}
+
+
+def backfill_linkedin(limit: int = 80) -> dict:
+    """One-off: fill linkedin_url for named contacts that don't have one, via the search API."""
+    _, key = _search_cfg()
+    if not key:
+        return {"skipped": True, "reason": "no SEARCH_API_KEY"}
+    rows = with_supabase_retry(
+        lambda: get_supabase()
+        .table("contacts")
+        .select("id, full_name, company_id")
+        .not_.is_("full_name", "null")
+        .is_("linkedin_url", "null")
+        .limit(limit)
+        .execute()
+        .data
+    ) or []
+    name_cache: dict = {}
+    updated = 0
+    for c in rows:
+        cid = c.get("company_id")
+        cname = None
+        if cid:
+            if cid in name_cache:
+                cname = name_cache[cid]
+            else:
+                co = with_supabase_retry(
+                    lambda: get_supabase().table("companies").select("name").eq("id", cid).limit(1).execute().data
+                ) or []
+                cname = co[0]["name"] if co else None
+                name_cache[cid] = cname
+        url = resolve_linkedin(c.get("full_name"), cname)
+        if url:
+            ccid = c["id"]
+            with_supabase_retry(lambda: get_supabase().table("contacts").update({"linkedin_url": url}).eq("id", ccid).execute())
+            updated += 1
+    return {"candidates": len(rows), "linkedin_filled": updated}
 
 
 def enrich_project_contacts(project_id: str, signal_id: str, signal_type: str, extracted: dict, web: bool) -> dict:

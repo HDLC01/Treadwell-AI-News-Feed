@@ -31,3 +31,14 @@ def health() -> HealthResponse:
         supabase_configured=supabase_configured,
         time=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
     )
+
+
+@router.get("/config")
+def config() -> dict:
+    """Office anchor + radii for the Radar map (no secrets)."""
+    return {
+        "kc_lat": settings.KC_LAT,
+        "kc_lon": settings.KC_LON,
+        "data_center_radius_mi": settings.DATA_CENTER_RADIUS_MI,
+        "other_radius_mi": settings.OTHER_RADIUS_MI,
+    }

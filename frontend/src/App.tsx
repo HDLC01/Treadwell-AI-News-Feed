@@ -4,6 +4,7 @@ import { useTheme } from "./lib/theme";
 import FeedPage from "./pages/FeedPage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
 import PipelinePage from "./pages/PipelinePage";
+import MapPage from "./pages/MapPage";
 import DigestsPage from "./pages/DigestsPage";
 import AdminPage from "./pages/AdminPage";
 
@@ -17,6 +18,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<FeedPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
+          <Route path="/map" element={<MapPage />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
           <Route path="/digests" element={<DigestsPage />} />
           <Route path="/admin" element={<AdminPage />} />
