@@ -40,7 +40,8 @@ export type ProjectStatus =
   | "won"
   | "passed"
   | "archived"
-  | "dismissed";
+  | "dismissed"
+  | "existing";
 
 export type TeamRole =
   | "general_contractor"

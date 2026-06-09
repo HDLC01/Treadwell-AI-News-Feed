@@ -217,6 +217,7 @@ export const STATUS_LABELS: Record<ProjectStatus, string> = {
   passed: "Passed",
   archived: "Archived",
   dismissed: "Dismissed",
+  existing: "Existing",
 };
 
 export const CONTACT_KIND_LABELS: Record<ContactKind, string> = {

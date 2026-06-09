@@ -1,0 +1,13 @@
+# Standalone connector stack. Deploys separately from the News Feed — bringing
+# this up/down NEVER touches the running feed container.
+#   cd /opt/treadwell-newsfeed-connector && docker compose up -d --build
+services:
+  connector:
+    build: .
+    image: treadwell-newsfeed-connector
+    container_name: treadwell-newsfeed-connector
+    restart: unless-stopped
+    env_file: .env
+    # Bind to loopback only; nginx is the sole public surface (TLS terminates there).
+    ports:
+      - "127.0.0.1:8894:8894"

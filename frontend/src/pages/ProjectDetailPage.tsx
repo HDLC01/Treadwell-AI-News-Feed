@@ -71,7 +71,8 @@ type StatusValue =
   | "pursuing"
   | "won"
   | "passed"
-  | "dismissed";
+  | "dismissed"
+  | "existing";
 
 const STATUS_OPTIONS: { value: StatusValue; label: string; icon: typeof Eye; destructive?: boolean }[] = [
   { value: "active", label: "Active", icon: CheckCircle2 },
@@ -79,6 +80,7 @@ const STATUS_OPTIONS: { value: StatusValue; label: string; icon: typeof Eye; des
   { value: "pursuing", label: "Pursuing", icon: Crosshair },
   { value: "won", label: "Won", icon: Trophy },
   { value: "passed", label: "Passed", icon: XCircle },
+  { value: "existing", label: "Existing", icon: Archive },
   { value: "dismissed", label: "Dismiss", icon: Ban, destructive: true },
 ];
 

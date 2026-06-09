@@ -39,7 +39,11 @@ _ROLE_PRIORITY = {
     "other": 8,
 }
 
-_VALID_STATUSES = {"new", "active", "watching", "pursuing", "won", "passed", "archived", "dismissed"}
+_VALID_STATUSES = {"new", "active", "watching", "pursuing", "won", "passed", "archived", "dismissed", "existing"}
+
+# Statuses hidden from the default feed / map / stats (and therefore from connector
+# outreach). 'existing' = already in Treadwell's Dropbox pipeline (bid or won).
+_DEFAULT_HIDDEN_STATUSES = ["archived", "dismissed", "existing"]
 
 
 def _within_70(distance_mi) -> Optional[bool]:
@@ -233,7 +237,7 @@ def list_projects(
         if statuses:
             qb = qb.in_("status", statuses)
         else:
-            qb = qb.not_.in_("status", ["archived", "dismissed"])
+            qb = qb.not_.in_("status", _DEFAULT_HIDDEN_STATUSES)
         if in_radius is not None:
             qb = qb.eq("in_radius", in_radius)
         if q:
@@ -432,7 +436,7 @@ def map_points() -> List[Dict[str, Any]]:
             .table("projects")
             .select("id,title,latitude,longitude,relevance_tier,project_type,distance_mi,city,state,status")
             .is_("merged_into", "null")
-            .not_.in_("status", ["archived", "dismissed"])
+            .not_.in_("status", _DEFAULT_HIDDEN_STATUSES)
             .not_.is_("latitude", "null")
             .limit(2000)
             .execute()
@@ -485,7 +489,7 @@ def get_stats() -> Stats:
             d = d.replace(tzinfo=_utc)
         return d.astimezone(_tz).date() == _today_central
 
-    visible = [r for r in rows if (r.get("status") or "") not in ("archived", "dismissed")]
+    visible = [r for r in rows if (r.get("status") or "") not in _DEFAULT_HIDDEN_STATUSES]
     return Stats(
         total=len(visible),
         new=sum(1 for r in visible if (r.get("status") or "") == "new"),

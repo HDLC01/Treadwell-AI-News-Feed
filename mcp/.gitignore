@@ -1,0 +1,12 @@
+# Secrets / env
+.env
+
+# Python / uv
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Local caches + scratch (folder-name index cache, temp file copies)
+.cache/
+_work/
