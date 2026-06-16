@@ -68,8 +68,23 @@ class Settings(BaseSettings):
     PIPELINE_TZ: str = "America/Chicago"
     RUN_SCHEDULER: bool = False
 
-    # ─── Contacts gate ───────────────────────────────────────────────────
+    # ─── Contacts gate (legacy; superseded by SSO + the service API key) ──
     CONTACTS_GATE_PASSWORD: str = ""
+
+    # ─── Auth: Google SSO via the SHARED Treadwell auth Supabase project ──
+    # Sign-in uses the shared Treadwell auth project (NOT this feed's data
+    # project above). The SPA signs in with Google there; the backend verifies
+    # the resulting JWT and gates to @wetreadwell.com. Feed data still flows
+    # only through this API — no Supabase client ever reaches the browser.
+    AUTH_SUPABASE_URL: str = ""          # https://<ref>.supabase.co (JWKS + frontend)
+    AUTH_SUPABASE_ANON_KEY: str = ""     # public anon key, sent to the SPA
+    AUTH_SUPABASE_JWT_SECRET: str = ""   # legacy HS256 secret (fallback verify)
+    AUTH_ALLOWED_DOMAIN: str = "wetreadwell.com"
+    ADMIN_EMAILS: str = "hanz@wetreadwell.com"
+    # DEV-ONLY "Preview as admin" bypass; MUST stay false in production.
+    DEV_LOGIN: bool = False
+    # Read-only service principal for the MCP connector (sent as X-Api-Key).
+    NEWSFEED_API_KEY: str = ""
 
     # ─── Search API (resolve real LinkedIn profile URLs — NOT scraping LinkedIn) ─
     # provider: "brave" (api.search.brave.com, generous free tier) or "serpapi".
@@ -106,6 +121,16 @@ class Settings(BaseSettings):
         """Recipient list for the daily hot-summary email (comma-separated env)."""
         raw = self.SUMMARY_TO_EMAILS or ""
         return [e.strip() for e in raw.split(",") if e.strip()]
+
+    @property
+    def auth_configured(self) -> bool:
+        """True once the shared auth project's URL + anon key are present."""
+        return bool(self.AUTH_SUPABASE_URL and self.AUTH_SUPABASE_ANON_KEY)
+
+    @property
+    def admin_email_set(self) -> set:
+        """Lower-cased admin emails (comma-separated env)."""
+        return {e.strip().lower() for e in (self.ADMIN_EMAILS or "").split(",") if e.strip()}
 
     @property
     def cors_origins_list(self) -> List[str]:

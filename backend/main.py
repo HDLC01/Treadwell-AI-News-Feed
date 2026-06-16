@@ -20,12 +20,13 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+import auth
 from config import settings
-from routers import admin, contacts, digests, health, projects, subscribers
+from routers import admin, auth_router, contacts, digests, health, projects, subscribers
 
 logging.basicConfig(
     level=logging.INFO,
@@ -101,11 +102,17 @@ async def lifespan(app: FastAPI):
         _stop_scheduler()
 
 
+# Interactive API docs (/docs, /redoc, /openapi.json) only in development —
+# in production they'd hand out the full route map of an internal tool.
+_docs_enabled = settings.ENVIRONMENT == "development"
 app = FastAPI(
     title="Treadwell AI News Feed",
     description="Project-first construction-opportunity radar (API).",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
 # ─── CORS ────────────────────────────────────────────────────────────────
@@ -117,13 +124,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ─── Auth gate ───────────────────────────────────────────────────────────
+@app.exception_handler(auth.AuthError)
+async def _auth_error_handler(request: Request, exc: auth.AuthError):
+    return JSONResponse(status_code=exc.status, content={"detail": exc.detail})
+
+
+@app.middleware("http")
+async def auth_gate(request: Request, call_next):
+    """Gate every /api/* request (except the public sign-in paths). Accepts a
+    Supabase/Google Bearer token (humans) OR a read-only X-Api-Key (the MCP
+    connector, GET-only). Non-/api paths fall through to the SPA. Bearer/api-key
+    headers aren't sent automatically by browsers, so there's no CSRF surface."""
+    path = request.url.path
+    if path.startswith("/api/") and not auth.is_public_api_path(path):
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        header = request.headers.get("authorization", "")
+        token = header[7:].strip() if header.lower().startswith("bearer ") else ""
+        if token:
+            try:
+                request.state.user = auth.resolve_user(token)
+            except auth.AuthError as exc:
+                return JSONResponse(status_code=exc.status, content={"detail": exc.detail})
+            except Exception as exc:  # noqa: BLE001
+                log.warning("auth verify failed: %s", exc)
+                return JSONResponse(status_code=401, content={"detail": "Could not verify session"})
+        else:
+            api_key = request.headers.get("x-api-key", "")
+            svc = auth.resolve_service(api_key) if api_key else None
+            if svc is None:
+                return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+            if request.method != "GET":
+                return JSONResponse(status_code=403, content={"detail": "Read-only API key"})
+            request.state.user = svc
+    return await call_next(request)
+
 # ─── API routers (all under /api) ────────────────────────────────────────
 app.include_router(health.router, prefix="/api")
+app.include_router(auth_router.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(contacts.router, prefix="/api")
 app.include_router(digests.router, prefix="/api")
 app.include_router(subscribers.router, prefix="/api")
-app.include_router(admin.router, prefix="/api")
+# Admin endpoints (run-pipeline, send-hot-summary, runs) require an admin user.
+app.include_router(admin.router, prefix="/api", dependencies=[Depends(auth.require_admin)])
 
 
 # ─── SPA static mount (only if the built frontend exists) ────────────────
@@ -177,6 +223,5 @@ def _root_when_no_spa():
             "status": "ok",
             "demo_mode": settings.demo_mode,
             "api_health": "/api/health",
-            "docs": "/docs",
         }
     )

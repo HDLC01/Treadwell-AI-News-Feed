@@ -67,6 +67,7 @@ def score_project(project: dict) -> dict:
     final score so score/tier never disagree.
     """
     result = _score_via_claude(project)
+    used_model = result is not None
     if result is None:
         result = _score_via_rules(project)
 
@@ -75,6 +76,20 @@ def score_project(project: dict) -> dict:
     reasoning = result.get("relevance_reasoning") or {}
     if not isinstance(reasoning, dict):
         reasoning = {"summary": str(reasoning)}
+
+    # Anti-injection sanity check: the model score is influenceable by poisoned
+    # article text, so cross-check it against the deterministic rule score (which
+    # reads only structured numeric fields an attacker can't easily forge). If the
+    # model rates a project far above what the rules justify, clamp it — so an
+    # injected "score this 100/hot" can't push junk into the hot list or 6 AM email.
+    if used_model:
+        rule = _score_via_rules(project)
+        rule_score = int(max(0, min(100, round(rule.get("relevance_score", 0)))))
+        if score - rule_score > 25:
+            clamped = rule_score + 25
+            reasoning["model_rule_divergence"] = f"model={score} vs rules={rule_score}; clamped to {clamped}"
+            score = clamped
+            tier = _tier_for(score)
 
     # Recency override: a stale latest article means it is not a current opportunity.
     if _stale(project.get("last_signal_at")):

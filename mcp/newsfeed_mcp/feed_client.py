@@ -1,8 +1,10 @@
 """Read-only HTTP client for the Treadwell AI News Feed REST API.
 
-All access is GET-only. The connector never writes to the feed. Endpoints used
-(all under `{base}/api`): /stats, /projects, /projects/{id}, /projects/{id}/signals,
-/projects/{id}/contacts (gated by X-Contacts-Key), /digests, /digests/{date}.
+All access is GET-only. The connector never writes to the feed. It authenticates
+to the (SSO-gated) feed API as a read-only service principal via the X-Api-Key
+header (NEWSFEED_API_KEY). Endpoints used (all under `{base}/api`): /stats,
+/projects, /projects/{id}, /projects/{id}/signals, /projects/{id}/contacts,
+/digests, /digests/{date}.
 """
 
 from __future__ import annotations
@@ -21,13 +23,17 @@ class FeedClient:
     def __init__(
         self,
         base_url: Optional[str] = None,
-        contacts_key: Optional[str] = None,
+        api_key: Optional[str] = None,
         timeout: float = 20.0,
     ) -> None:
         raw = base_url if base_url is not None else os.environ.get("NEWSFEED_BASE_URL", DEFAULT_BASE)
         self.base_url = (raw or DEFAULT_BASE).rstrip("/")
-        self.contacts_key = (
-            contacts_key if contacts_key is not None else os.environ.get("NEWSFEED_CONTACTS_KEY", "")
+        # Read-only service key the feed accepts as X-Api-Key. Falls back to the
+        # legacy NEWSFEED_CONTACTS_KEY so an un-migrated .env still works.
+        self.api_key = (
+            api_key
+            if api_key is not None
+            else (os.environ.get("NEWSFEED_API_KEY") or os.environ.get("NEWSFEED_CONTACTS_KEY", ""))
         )
         self.timeout = timeout
 
@@ -36,8 +42,13 @@ class FeedClient:
              headers: Optional[Dict[str, str]] = None) -> Any:
         url = f"{self.base_url}/api{path}"
         clean = {k: v for k, v in (params or {}).items() if v is not None}
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
-            resp = client.get(url, params=clean, headers=headers)
+        hdrs = dict(headers or {})
+        if self.api_key:
+            hdrs["X-Api-Key"] = self.api_key
+        # follow_redirects=False: the connector only ever talks to the trusted
+        # feed host; never chase a redirect to somewhere else.
+        with httpx.Client(timeout=self.timeout, follow_redirects=False) as client:
+            resp = client.get(url, params=clean, headers=hdrs or None)
             resp.raise_for_status()
             return resp.json()
 
@@ -83,12 +94,12 @@ class FeedClient:
         return self._get(f"/projects/{project_id}/signals")
 
     def get_contacts(self, project_id: str) -> List[Dict[str, Any]]:
-        headers = {"X-Contacts-Key": self.contacts_key} if self.contacts_key else None
         try:
-            return self._get(f"/projects/{project_id}/contacts", headers=headers)
+            return self._get(f"/projects/{project_id}/contacts")
         except httpx.HTTPStatusError as exc:
-            # 401 => contacts are gated and we lack the key; degrade to empty.
-            if exc.response is not None and exc.response.status_code == 401:
+            # 401/403 => our service key is missing/invalid; degrade to empty
+            # rather than failing the whole get_project call.
+            if exc.response is not None and exc.response.status_code in (401, 403):
                 return []
             raise
 

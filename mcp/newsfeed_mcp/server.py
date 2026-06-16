@@ -66,6 +66,17 @@ def _trim_summary(p: Dict[str, Any]) -> Dict[str, Any]:
     return {k: p.get(k) for k in _SUMMARY_FIELDS}
 
 
+def _redact_contacts(contacts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Blank email/phone for do_not_contact records before they leave the
+    system — the flag is surfaced, but never the address needed to violate it."""
+    out: List[Dict[str, Any]] = []
+    for c in contacts or []:
+        if c.get("do_not_contact"):
+            c = {**c, "email": None, "phone": None, "suppressed": "do_not_contact"}
+        out.append(c)
+    return out
+
+
 def _passes(p: Dict[str, Any], project_types: Optional[List[str]], max_distance_mi: Optional[float]) -> bool:
     if project_types and (p.get("project_type") or "") not in project_types:
         return False
@@ -151,7 +162,7 @@ def get_project(
             detail["signals_error"] = str(exc)
     if include_contacts:
         try:
-            detail["contacts"] = feed.get_contacts(project_id)
+            detail["contacts"] = _redact_contacts(feed.get_contacts(project_id))
         except Exception as exc:  # noqa: BLE001
             detail["contacts_error"] = str(exc)
     return detail
@@ -238,8 +249,9 @@ def draft_outreach(
 # ─── health route (for nginx / uptime checks) ────────────────────────────────
 @mcp.custom_route("/healthz", methods=["GET"])
 async def healthz(_request: Request) -> JSONResponse:
+    # Public endpoint — never echo the secret path or the internal feed URL.
     return JSONResponse(
-        {"status": "ok", "service": "treadwell-newsfeed-mcp", "feed": feed.base_url, "mcp_path": MCP_PATH}
+        {"status": "ok", "service": "treadwell-newsfeed-mcp", "configured": bool(SECRET)}
     )
 
 

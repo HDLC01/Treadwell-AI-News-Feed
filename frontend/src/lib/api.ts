@@ -16,7 +16,10 @@ import type {
   RadarConfig,
   Signal,
   Stats,
+  User,
+  AuthConfig,
 } from "./types";
+import { getAccessToken, DEV_TOKEN_KEY } from "./supabase";
 
 const BASE = "";
 
@@ -38,6 +41,13 @@ async function request<T>(
 ): Promise<T> {
   const { rawText, headers, ...rest } = init ?? {};
 
+  // Attach the Supabase/Google access token on all but the public sign-in paths.
+  const authHeaders: Record<string, string> = {};
+  if (path !== "/api/auth/config" && path !== "/api/health") {
+    const token = await getAccessToken();
+    if (token) authHeaders["Authorization"] = `Bearer ${token}`;
+  }
+
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, {
@@ -45,6 +55,7 @@ async function request<T>(
       headers: {
         Accept: "application/json",
         ...(rest.body ? { "Content-Type": "application/json" } : {}),
+        ...authHeaders,
         ...(headers ?? {}),
       },
     });
@@ -201,4 +212,20 @@ export function subscribe(
     method: "POST",
     body: JSON.stringify({ email, full_name: name ?? undefined }),
   });
+}
+
+// ---- Auth (Google SSO) ----
+
+/** Public: how the SPA reaches the shared Supabase auth project (Google sign-in). */
+export const getAuthConfig = () => request<AuthConfig>("/api/auth/config");
+
+/** Verified: the current principal's email + role (provisions nothing). */
+export const getMe = () => request<User>("/api/auth/me");
+
+/** DEV-ONLY: fetch a preview-admin token and store it for subsequent requests. */
+export async function devLogin(): Promise<void> {
+  const r = await request<{ access_token: string }>("/api/auth/dev-login", {
+    method: "POST",
+  });
+  localStorage.setItem(DEV_TOKEN_KEY, r.access_token);
 }

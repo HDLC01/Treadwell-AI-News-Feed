@@ -181,6 +181,14 @@ def html_generic(source: dict) -> list[dict]:
 
     _polite_wait(url)
 
+    # SSRF guard: refuse a source URL that resolves to a private/internal host.
+    from services.net_guard import assert_public_url, UnsafeURLError  # lazy
+    try:
+        assert_public_url(url)
+    except UnsafeURLError as exc:
+        log.warning("skip source fetch — unsafe url %r: %s", url, exc)
+        return []
+
     headers = {"User-Agent": _user_agent(), "Accept": "text/html,application/xhtml+xml"}
     with httpx.Client(timeout=_FETCH_TIMEOUT_S, follow_redirects=True, headers=headers) as client:
         resp = client.get(url)

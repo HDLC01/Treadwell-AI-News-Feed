@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { NavLink, Link } from "react-router-dom";
-import { Radar, Menu, X, Target, Map } from "lucide-react";
+import { Radar, Menu, X, Target, Map, LogOut } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import type { Theme } from "../lib/theme";
+import { useAuth } from "../lib/auth";
 
 interface Props {
   theme: Theme;
@@ -36,6 +37,9 @@ function navClass({ isActive }: { isActive: boolean }): string {
 
 export default function TopBar({ theme, onToggleTheme }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { user, isAdmin, logout } = useAuth();
+  // Admin tab only for admins; everyone else sees it hidden (server enforces too).
+  const nav = NAV.filter((item) => item.to !== "/admin" || isAdmin);
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
@@ -60,7 +64,7 @@ export default function TopBar({ theme, onToggleTheme }: Props) {
 
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink key={item.to} to={item.to} end={item.end} className={navClass}>
@@ -72,6 +76,22 @@ export default function TopBar({ theme, onToggleTheme }: Props) {
         </nav>
 
         <div className="flex items-center gap-2">
+          {user && (
+            <div className="hidden items-center gap-2 md:flex">
+              <span className="max-w-[180px] truncate text-xs text-muted" title={user.email}>
+                {user.email}
+              </span>
+              <button
+                type="button"
+                onClick={logout}
+                aria-label="Sign out"
+                title="Sign out"
+                className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-md border border-border bg-surface px-2.5 text-sm font-medium text-fg transition-colors duration-200 hover:bg-muted"
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" /> Sign out
+              </button>
+            </div>
+          )}
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
           <button
             type="button"
@@ -96,7 +116,7 @@ export default function TopBar({ theme, onToggleTheme }: Props) {
           aria-label="Mobile"
         >
           <div className="flex flex-col gap-1">
-            {NAV.map((item) => {
+            {nav.map((item) => {
               const Icon = item.icon;
               return (
                 <NavLink
@@ -111,6 +131,16 @@ export default function TopBar({ theme, onToggleTheme }: Props) {
                 </NavLink>
               );
             })}
+            {user && (
+              <button
+                type="button"
+                onClick={() => { setMenuOpen(false); logout(); }}
+                className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium text-fg transition-colors duration-200 hover:bg-muted"
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" /> Sign out
+                <span className="ml-1 truncate text-xs text-muted">{user.email}</span>
+              </button>
+            )}
           </div>
         </nav>
       )}

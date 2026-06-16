@@ -13,6 +13,8 @@ python-multipart==0.0.20
 # tzdata: bundle the IANA tz database so ZoneInfo("America/Chicago") resolves
 # even on a minimal base image — keeps every human-facing date pinned to Central.
 tzdata>=2024.1
+# Auth: verify Supabase/Google JWTs (RS256 via JWKS needs the crypto extra).
+PyJWT[crypto]==2.10.1
 
 # ─── Database (lazy: only imported when Supabase is configured) ───────────
 supabase==2.11.0

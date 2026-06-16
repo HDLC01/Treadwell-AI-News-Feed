@@ -1,16 +1,17 @@
 """
 Contacts router.
 
-The single contacts endpoint honors CONTACTS_GATE_PASSWORD: if that env var is
-set, the caller must send a matching `X-Contacts-Key` header (the public-page
-carve-out). If it is empty, contacts are open. Returns Contact[] per SPEC §4.
+Contact PII is protected by the app-wide auth gate in main.py: every /api/*
+request needs either a verified Google JWT (a signed-in @wetreadwell.com user)
+or the read-only service key (the MCP connector). There is no separate
+per-endpoint gate here. Returns Contact[] per SPEC §4.
 """
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from config import settings
 from models.schemas import Contact
@@ -18,24 +19,9 @@ from models.schemas import Contact
 router = APIRouter(tags=["contacts"])
 
 
-def _gate(provided_key: Optional[str]) -> None:
-    """Raise 401 if the contacts gate is enabled and the key doesn't match."""
-    required = settings.CONTACTS_GATE_PASSWORD or ""
-    if required and provided_key != required:
-        raise HTTPException(
-            status_code=401,
-            detail="Contacts are gated. Provide a valid X-Contacts-Key header.",
-        )
-
-
 @router.get("/projects/{project_id}/contacts", response_model=List[Contact])
-def get_project_contacts(
-    project_id: str,
-    x_contacts_key: Optional[str] = Header(None, alias="X-Contacts-Key"),
-) -> List[Contact]:
-    """Contacts for a project's team companies (gated by X-Contacts-Key if set)."""
-    _gate(x_contacts_key)
-
+def get_project_contacts(project_id: str) -> List[Contact]:
+    """Contacts for a project's team companies (auth enforced by the app gate)."""
     if settings.demo_mode:
         from services import fixtures
 

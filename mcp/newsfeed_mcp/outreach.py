@@ -126,12 +126,14 @@ def compose_outreach(
         company = contact.get("company_name") or ""
         if contact.get("do_not_contact"):
             warnings.append(
-                f"Contact {contact.get('full_name') or contact.get('email')} is flagged "
-                "do_not_contact — do NOT send. Pick another contact."
+                f"Contact {contact.get('full_name') or 'this person'} is flagged "
+                "do_not_contact — their email is withheld. Pick another contact."
             )
-        to = contact.get("email") or ""
-        if not to:
-            warnings.append("Chosen contact has no email on file — fill in a recipient before sending.")
+            to = ""  # never hand back a do-not-contact address
+        else:
+            to = contact.get("email") or ""
+            if not to:
+                warnings.append("Chosen contact has no email on file — fill in a recipient before sending.")
         name = contact.get("full_name")
         if name:
             greeting = f"Hi {name.split()[0]},"

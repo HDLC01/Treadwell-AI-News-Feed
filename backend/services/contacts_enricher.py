@@ -311,6 +311,7 @@ def _company_website(co: dict, existing: list[dict]) -> Optional[str]:
 def _scrape_company(project_id: str, co: dict, site: str, existing: list[dict]) -> int:
     import httpx  # lazy
     from bs4 import BeautifulSoup  # lazy
+    from services.net_guard import assert_public_url, UnsafeURLError  # lazy
 
     base = site.rstrip("/")
     company_id = co.get("id")
@@ -320,7 +321,16 @@ def _scrape_company(project_id: str, co: dict, site: str, existing: list[dict]) 
     page_texts: list[tuple[str, str]] = []
     pages_done = 0
 
-    with httpx.Client(timeout=_FETCH_TIMEOUT, follow_redirects=True, headers=headers) as client:
+    # SSRF guard: `site` can originate from model output over untrusted article
+    # text. Refuse private/internal hosts, and disable redirects so a 30x can't
+    # bounce us to an internal address.
+    try:
+        assert_public_url(base)
+    except UnsafeURLError as exc:
+        log.warning("skip company scrape — unsafe site %r: %s", site, exc)
+        return 0
+
+    with httpx.Client(timeout=_FETCH_TIMEOUT, follow_redirects=False, headers=headers) as client:
         for path in _PAGES:
             if pages_done >= _MAX_PAGES:
                 break

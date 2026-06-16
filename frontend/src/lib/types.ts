@@ -68,6 +68,23 @@ export type CompanyType =
 
 export type ConfidenceLabel = "confirmed" | "likely" | "rumored";
 
+// ---- Auth (Google SSO) ----
+export type Role = "admin" | "viewer" | "service";
+
+export interface User {
+  email: string;
+  role: Role;
+  kind?: "user" | "service";
+}
+
+export interface AuthConfig {
+  supabase_url: string;
+  supabase_anon_key: string;
+  allowed_domain: string;
+  configured: boolean;
+  dev_login: boolean;
+}
+
 export type SignalType =
   | "news"
   | "press_release"

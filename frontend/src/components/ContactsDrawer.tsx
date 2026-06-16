@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import type { FormEvent } from "react";
 import {
   X,
   Mail,
@@ -7,7 +6,6 @@ import {
   User,
   Inbox,
   Building2,
-  Lock,
   Link as LinkIcon,
   Linkedin,
   ShieldCheck,
@@ -16,6 +14,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { Contact } from "../lib/types";
+import { getProjectContacts, ApiError } from "../lib/api";
 
 /**
  * Slide-over drawer that lists a project's contacts grouped by company.
@@ -209,50 +208,35 @@ export function ContactsDrawer({
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [gated, setGated] = useState(false);
-  const [keyInput, setKeyInput] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
-  const load = useCallback(
-    async (key?: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const headers: Record<string, string> = { Accept: "application/json" };
-        if (key) headers["X-Contacts-Key"] = key;
-        const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/contacts`, {
-          headers,
-        });
-        if (res.status === 401) {
-          setGated(true);
-          setContacts(null);
-          if (key) setError("That password was not accepted. Try again.");
-          return;
-        }
-        if (!res.ok) {
-          throw new Error(`Request failed (${res.status})`);
-        }
-        const data = (await res.json()) as Contact[];
-        setContacts(Array.isArray(data) ? data : []);
-        setGated(false);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load contacts.");
-        setContacts(null);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [projectId]
-  );
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // The session bearer token is attached by the API client; the app-wide
+      // auth gate already requires a signed-in @wetreadwell.com user.
+      const data = await getProjectContacts(projectId);
+      setContacts(Array.isArray(data) ? data : []);
+    } catch (e) {
+      const msg =
+        e instanceof ApiError && e.status === 401
+          ? "Your session expired — sign in again to view contacts."
+          : e instanceof Error
+            ? e.message
+            : "Failed to load contacts.";
+      setError(msg);
+      setContacts(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
 
   // Load on open; reset on close.
   useEffect(() => {
     if (open) {
-      setKeyInput("");
       void load();
     } else {
       setContacts(null);
-      setGated(false);
       setError(null);
     }
   }, [open, load]);
@@ -266,14 +250,6 @@ export function ContactsDrawer({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
-
-  const submitKey = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!keyInput.trim()) return;
-    setSubmitting(true);
-    await load(keyInput.trim());
-    setSubmitting(false);
-  };
 
   if (!open) return null;
 
@@ -317,48 +293,6 @@ export function ContactsDrawer({
               <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
               Loading contacts…
             </div>
-          ) : gated ? (
-            <div className="rounded-lg border border-border bg-bg p-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-fg">
-                <Lock className="h-4 w-4" aria-hidden="true" />
-                Contacts are protected
-              </div>
-              <p className="mb-3 text-xs text-fg/70">
-                Enter the access password to view contact details for this project.
-              </p>
-              <form onSubmit={submitKey} className="flex flex-col gap-2">
-                <label htmlFor="contacts-key" className="sr-only">
-                  Contacts password
-                </label>
-                <input
-                  id="contacts-key"
-                  type="password"
-                  value={keyInput}
-                  onChange={(e) => setKeyInput(e.target.value)}
-                  autoFocus
-                  placeholder="Password"
-                  className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg outline-none focus:ring-2 focus:ring-ring"
-                />
-                {error ? (
-                  <p className="flex items-center gap-1 text-xs text-destructive">
-                    <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                    {error}
-                  </p>
-                ) : null}
-                <button
-                  type="submit"
-                  disabled={submitting || !keyInput.trim()}
-                  className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-fg transition-opacity duration-150 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {submitting ? (
-                    <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                  ) : (
-                    <Lock className="h-4 w-4" aria-hidden="true" />
-                  )}
-                  Unlock contacts
-                </button>
-              </form>
-            </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
               <AlertTriangle className="h-6 w-6 text-destructive" aria-hidden="true" />
@@ -399,7 +333,7 @@ export function ContactsDrawer({
           )}
         </div>
 
-        {!loading && !gated && totalContacts > 0 ? (
+        {!loading && totalContacts > 0 ? (
           <footer className="border-t border-border px-4 py-2 text-[11px] text-fg/70">
             AI drafts, humans decide. Always verify a contact before reaching out; do-not-contact flags
             are honored across the system.
