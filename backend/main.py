@@ -19,12 +19,14 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import auth
+from audit import audit_log
 from config import settings
 from routers import admin, auth_router, contacts, digests, health, projects, subscribers
 
@@ -104,7 +106,7 @@ async def lifespan(app: FastAPI):
 
 # Interactive API docs (/docs, /redoc, /openapi.json) only in development —
 # in production they'd hand out the full route map of an internal tool.
-_docs_enabled = settings.ENVIRONMENT == "development"
+_docs_enabled = settings.ENVIRONMENT.lower() in {"development", "dev", "local"}
 app = FastAPI(
     title="Treadwell AI News Feed",
     description="Project-first construction-opportunity radar (API).",
@@ -160,6 +162,49 @@ async def auth_gate(request: Request, call_next):
                 return JSONResponse(status_code=403, content={"detail": "Read-only API key"})
             request.state.user = svc
     return await call_next(request)
+
+
+# ─── Audit trail ─────────────────────────────────────────────────────────
+# Records WHO did WHAT: authenticated state changes (POST/PUT/PATCH/DELETE) and
+# sensitive reads (contacts/admin/export/file/download/me). Registered AFTER the
+# auth gate so it runs outermost and can read request.state.user (set by the
+# gate) once call_next returns. Additive + best-effort: it never alters the
+# response and is fully wrapped in try/except so it can't break a request.
+_AUDIT_SENSITIVE = ("/admin", "/contacts", "/export", "/file", "/download")
+
+
+@app.middleware("http")
+async def audit_trail(request: Request, call_next):
+    response = await call_next(request)
+    try:
+        method = request.method
+        path = request.url.path
+        record_it = method in {"POST", "PUT", "PATCH", "DELETE"} or any(
+            seg in path for seg in _AUDIT_SENSITIVE
+        )
+        # Skip preflight and the health probe (high-volume, no audit value).
+        if record_it and method != "OPTIONS" and path != "/api/health":
+            user = getattr(request.state, "user", None)
+            email = user.get("email") if isinstance(user, dict) else None
+            fwd = request.headers.get("x-forwarded-for", "")
+            ip = fwd.split(",")[0].strip() if fwd else (
+                request.client.host if request.client else None
+            )
+            audit_log(
+                {
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "evt": "audit",
+                    "user": email or "anon",
+                    "method": method,
+                    "path": path,
+                    "status": response.status_code,
+                    "ip": ip,
+                }
+            )
+    except Exception as exc:  # noqa: BLE001 — auditing must never break a request
+        log.warning("audit_trail middleware failed: %s", exc)
+    return response
+
 
 # ─── API routers (all under /api) ────────────────────────────────────────
 app.include_router(health.router, prefix="/api")

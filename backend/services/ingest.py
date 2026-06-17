@@ -124,8 +124,22 @@ def rss_generic(source: dict) -> list[dict]:
 
     _polite_wait(url)
 
-    # feedparser can fetch the URL itself, but we pass a UA via request_headers.
-    parsed = feedparser.parse(url, request_headers={"User-Agent": _user_agent()})
+    # SSRF guard: validate + fetch through net_guard (which checks every redirect
+    # hop), then let feedparser parse the returned BYTES. feedparser's own fetch is
+    # NOT SSRF-guarded, so we never hand it the URL directly.
+    from services.net_guard import assert_public_url, safe_get, UnsafeURLError  # lazy
+    try:
+        assert_public_url(url)
+    except UnsafeURLError as exc:
+        log.warning("skip RSS source — unsafe url %r: %s", url, exc)
+        return []
+    try:
+        resp = safe_get(url, headers={"User-Agent": _user_agent()})
+        resp.raise_for_status()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("RSS fetch failed %r: %s", url, exc)
+        return []
+    parsed = feedparser.parse(resp.content)
 
     signal_type = _signal_type_for(source)
     source_id = source.get("id")
@@ -190,7 +204,7 @@ def html_generic(source: dict) -> list[dict]:
         return []
 
     headers = {"User-Agent": _user_agent(), "Accept": "text/html,application/xhtml+xml"}
-    with httpx.Client(timeout=_FETCH_TIMEOUT_S, follow_redirects=True, headers=headers) as client:
+    with httpx.Client(timeout=_FETCH_TIMEOUT_S, follow_redirects=False, headers=headers) as client:
         resp = client.get(url)
         resp.raise_for_status()
         html = resp.text

@@ -16,7 +16,7 @@ const DOT: Record<string, string> = {
 
 const TEXT: Record<string, string> = {
   hot: "text-hot",
-  warm: "text-warm",
+  warm: "text-warm-text",
   cold: "text-cold",
 };
 

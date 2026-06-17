@@ -27,6 +27,10 @@ export default {
         warm: "var(--warm)",
         cold: "var(--cold)",
         ring: "var(--ring)",
+        // On-surface TEXT variants (AA-contrast); fills above are for dots/bg.
+        "warm-text": "var(--warm-text)",
+        "info-text": "var(--info-text)",
+        success: "var(--success)",
       },
       fontFamily: {
         sans: ["Fira Sans", "ui-sans-serif", "system-ui", "sans-serif"],

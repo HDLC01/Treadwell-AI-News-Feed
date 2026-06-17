@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { Contact } from "../lib/types";
 import { getProjectContacts, ApiError } from "../lib/api";
+import { safeHref } from "../lib/safeHref";
 
 /**
  * Slide-over drawer that lists a project's contacts grouped by company.
@@ -146,9 +147,9 @@ function ContactRow({ contact }: { contact: Contact }) {
                 {contact.phone}
               </a>
             ) : null}
-            {contact.linkedin_url ? (
+            {safeHref(contact.linkedin_url) ? (
               <a
-                href={contact.linkedin_url}
+                href={safeHref(contact.linkedin_url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex w-fit cursor-pointer items-center gap-1.5 text-xs font-medium text-primary hover:underline"
@@ -175,13 +176,13 @@ function ContactRow({ contact }: { contact: Contact }) {
             <div className="mt-1.5 flex items-center gap-1 text-[10px] text-fg/70">
               <LinkIcon className="h-3 w-3" aria-hidden="true" />
               <span>Source: {src}</span>
-              {contact.source_url ? (
+              {safeHref(contact.source_url) ? (
                 <a
-                  href={contact.source_url}
+                  href={safeHref(contact.source_url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="cursor-pointer truncate text-secondary hover:underline"
-                  title={contact.source_url}
+                  title={contact.source_url ?? undefined}
                 >
                   view
                 </a>
@@ -280,7 +281,7 @@ export function ContactsDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-border text-fg transition-colors duration-150 hover:bg-muted"
+            className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border text-fg transition-colors duration-150 hover:bg-muted"
             aria-label="Close"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -301,7 +302,7 @@ export function ContactsDrawer({
               <button
                 type="button"
                 onClick={() => void load()}
-                className="mt-1 inline-flex h-9 cursor-pointer items-center justify-center rounded-md border border-border px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-muted"
+                className="mt-1 inline-flex h-11 cursor-pointer items-center justify-center rounded-md border border-border px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-muted"
               >
                 Retry
               </button>

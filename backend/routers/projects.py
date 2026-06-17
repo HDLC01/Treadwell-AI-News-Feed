@@ -10,8 +10,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+import auth
 from config import settings
 from models.schemas import (
     MergeRequest,
@@ -366,7 +367,11 @@ def update_project_status(project_id: str, body: StatusUpdate) -> ProjectSummary
 
 
 @router.post("/projects/{project_id}/merge", response_model=MergeResponse)
-def merge_project(project_id: str, body: MergeRequest) -> MergeResponse:
+def merge_project(
+    project_id: str,
+    body: MergeRequest,
+    _admin: dict = Depends(auth.require_admin),
+) -> MergeResponse:
     """Mark a project as merged into a target (sets merged_into + status=archived)."""
     if body.target_id == project_id:
         raise HTTPException(status_code=422, detail="Cannot merge a project into itself")

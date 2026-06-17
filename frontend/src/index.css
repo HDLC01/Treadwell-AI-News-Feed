@@ -22,6 +22,13 @@
   --cold: #64748b;
   --ring: #1e40af;
 
+  /* On-surface TEXT variants (darker than the fill colors so colored labels
+     clear WCAG 4.5:1 on light backgrounds). Use these for *text*, the fill
+     tokens above for dots/borders/backgrounds. */
+  --warm-text: #b45309;
+  --info-text: #1d4ed8;
+  --success: #15803d;
+
   color-scheme: light;
 }
 
@@ -42,6 +49,11 @@
   --warm: #f59e0b;
   --cold: #94a3b8;
   --ring: #3b82f6;
+
+  /* On dark backgrounds the lighter fills already clear contrast as text. */
+  --warm-text: #fbbf24;
+  --info-text: #93c5fd;
+  --success: #4ade80;
 
   color-scheme: dark;
 }

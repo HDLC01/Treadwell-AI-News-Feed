@@ -138,7 +138,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   if (status === "anon") return <Navigate to="/login" replace />;
   if (!isAdmin) {
     return (
-      <div className="mx-auto max-w-md p-10 text-center text-muted">
+      <div className="mx-auto max-w-md p-10 text-center text-cold">
         <p className="text-lg font-semibold text-fg">Admins only</p>
         <p className="mt-1 text-sm">You're signed in, but this area needs admin access.</p>
       </div>

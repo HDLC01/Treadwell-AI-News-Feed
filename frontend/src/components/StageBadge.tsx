@@ -10,10 +10,10 @@ interface Props {
 // get in front of the team); later stages cool off.
 const STAGE_TONE: Record<string, string> = {
   rumored: "border-cold/40 text-cold",
-  planning: "border-secondary/50 text-secondary",
-  design: "border-secondary/50 text-secondary",
-  permitting: "border-accent/50 text-accent",
-  procurement: "border-accent/50 text-accent",
+  planning: "border-secondary/50 text-info-text",
+  design: "border-secondary/50 text-info-text",
+  permitting: "border-accent/50 text-warm-text",
+  procurement: "border-accent/50 text-warm-text",
   pre_bid: "border-hot/50 text-hot",
   under_construction: "border-cold/40 text-cold",
   complete: "border-cold/30 text-cold",

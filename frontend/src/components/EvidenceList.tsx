@@ -1,5 +1,6 @@
 import { ExternalLink, FileText, Newspaper, Megaphone, Building, Zap, Landmark, FileSignature } from "lucide-react";
 import type { Signal } from "../lib/types";
+import { safeHref } from "../lib/safeHref";
 
 /**
  * Renders project signals (evidence) as compact rows:
@@ -82,6 +83,7 @@ export function EvidenceList({ signals }: { signals: Signal[] }) {
     <ul className="flex flex-col gap-2">
       {items.map((s) => {
         const conf = confidencePct(s.extraction_confidence);
+        const url = safeHref(s.url);
         return (
           <li
             key={s.id}
@@ -101,9 +103,9 @@ export function EvidenceList({ signals }: { signals: Signal[] }) {
             </div>
 
             <div className="mt-1.5">
-              {s.url ? (
+              {url ? (
                 <a
-                  href={s.url}
+                  href={url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex cursor-pointer items-start gap-1 text-sm font-semibold text-primary hover:underline"

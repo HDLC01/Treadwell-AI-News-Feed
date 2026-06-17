@@ -16,11 +16,11 @@ const CONFIG: Record<string, { tone: string; Icon: LucideIcon }> = {
     Icon: HardHat,
   },
   developer_named: {
-    tone: "border-secondary/50 bg-secondary/10 text-secondary",
+    tone: "border-secondary/50 bg-secondary/10 text-info-text",
     Icon: Building2,
   },
   owner_only: {
-    tone: "border-accent/50 bg-accent/10 text-accent",
+    tone: "border-accent/50 bg-accent/10 text-warm-text",
     Icon: User,
   },
   unknown: {

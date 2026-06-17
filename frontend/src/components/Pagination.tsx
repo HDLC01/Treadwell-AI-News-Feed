@@ -44,7 +44,7 @@ export default function Pagination({
           onClick={() => go(safePage - 1)}
           disabled={safePage <= 1}
           aria-label="Previous page"
-          className="inline-flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-md border border-border bg-surface px-2 text-sm transition-colors duration-200 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-11 min-w-11 sm:h-9 sm:min-w-9 cursor-pointer items-center justify-center rounded-md border border-border bg-surface px-2 text-sm transition-colors duration-200 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -64,7 +64,7 @@ export default function Pagination({
               onClick={() => go(p)}
               aria-current={p === safePage ? "page" : undefined}
               className={[
-                "num inline-flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-md border px-2 text-sm transition-colors duration-200",
+                "num inline-flex h-11 min-w-11 sm:h-9 sm:min-w-9 cursor-pointer items-center justify-center rounded-md border px-2 text-sm transition-colors duration-200",
                 p === safePage
                   ? "border-primary bg-primary text-primary-fg"
                   : "border-border bg-surface hover:bg-muted",
@@ -79,7 +79,7 @@ export default function Pagination({
           onClick={() => go(safePage + 1)}
           disabled={safePage >= totalPages}
           aria-label="Next page"
-          className="inline-flex h-9 min-w-9 cursor-pointer items-center justify-center rounded-md border border-border bg-surface px-2 text-sm transition-colors duration-200 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-11 min-w-11 sm:h-9 sm:min-w-9 cursor-pointer items-center justify-center rounded-md border border-border bg-surface px-2 text-sm transition-colors duration-200 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>

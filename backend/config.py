@@ -100,7 +100,7 @@ class Settings(BaseSettings):
     NOMINATIM_USER_AGENT: str = "treadwell-newsfeed/1.0 (hanz@wetreadwell.com)"
 
     # ─── Environment label ───────────────────────────────────────────────
-    ENVIRONMENT: str = "development"
+    ENVIRONMENT: str = "production"
 
     # ─── Derived helpers ─────────────────────────────────────────────────
     @property

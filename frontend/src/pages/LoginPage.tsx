@@ -23,7 +23,7 @@ export default function LoginPage() {
             <Radar className="h-6 w-6" />
           </div>
           <h1 className="mt-3 text-xl font-bold text-fg">Treadwell Radar</h1>
-          <p className="mt-1 text-sm text-muted">
+          <p className="mt-1 text-sm text-cold">
             Sign in with your Treadwell Google account.
           </p>
         </div>
@@ -43,13 +43,13 @@ export default function LoginPage() {
             <GoogleMark /> Continue with Google
           </button>
           {!configured && !devEnabled && (
-            <p className="mt-3 text-center text-xs text-muted">
+            <p className="mt-3 text-center text-xs text-cold">
               Sign-in isn't configured on the server yet (Supabase keys missing).
             </p>
           )}
           {devEnabled && (
             <>
-              <div className="my-4 flex items-center gap-2 text-[11px] uppercase tracking-wide text-muted">
+              <div className="my-4 flex items-center gap-2 text-[11px] uppercase tracking-wide text-cold">
                 <span className="h-px flex-1 bg-border" /> dev <span className="h-px flex-1 bg-border" />
               </div>
               <button
@@ -61,7 +61,7 @@ export default function LoginPage() {
               </button>
             </>
           )}
-          <p className="mt-4 text-center text-xs text-muted">
+          <p className="mt-4 text-center text-xs text-cold">
             Only <strong>@wetreadwell.com</strong> accounts can access this radar.
           </p>
         </div>

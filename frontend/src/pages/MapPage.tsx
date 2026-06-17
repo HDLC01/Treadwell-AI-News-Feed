@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   MapContainer,
   TileLayer,
@@ -117,12 +118,12 @@ export default function MapPage() {
                 type="button"
                 onClick={() => toggleTier(t)}
                 aria-pressed={on}
-                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-150"
+                className="inline-flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-150 sm:min-h-0"
                 style={{
                   borderColor: TIER_COLORS[t],
                   color: TIER_COLORS[t],
                   backgroundColor: on ? `${TIER_COLORS[t]}1A` : "transparent",
-                  opacity: on ? 1 : 0.45,
+                  textDecoration: on ? "none" : "line-through",
                 }}
                 title={on ? `Hide ${tierLabel(t)}` : `Show ${tierLabel(t)}`}
               >
@@ -269,12 +270,12 @@ export default function MapPage() {
                           <span className="text-slate-500">Outside 70 mi</span>
                         ) : null}
                       </div>
-                      <a
-                        href={`/project/${p.id}`}
-                        className="inline-block text-xs font-semibold text-blue-700 underline"
+                      <Link
+                        to={`/project/${p.id}`}
+                        className="inline-flex min-h-[44px] items-center text-xs font-semibold text-blue-700 underline"
                       >
                         View project
-                      </a>
+                      </Link>
                     </div>
                   </Popup>
                 </CircleMarker>

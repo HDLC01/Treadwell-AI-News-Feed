@@ -10,6 +10,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # Durable audit trail (who did what). audit.py also logs to stdout regardless.
+      - AUDIT_LOG_DIR=/app/audit
     ports:
       # Loopback-only: nginx terminates TLS and proxies to this.
       - "127.0.0.1:8890:8890"
@@ -17,6 +20,7 @@ services:
       # Persist the logged-in `claude` CLI credentials across restarts/rebuilds
       # so the container does not need to re-auth (matches the proposal-tool pattern).
       - claude_credentials:/root/.claude
+      - audit_logs:/app/audit
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8890/api/health"]
       interval: 30s
@@ -26,3 +30,4 @@ services:
 
 volumes:
   claude_credentials:
+  audit_logs:

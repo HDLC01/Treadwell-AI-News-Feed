@@ -75,7 +75,7 @@ export default function ConfirmDialog({
             type="button"
             onClick={() => !busy && onCancel()}
             aria-label="Close"
-            className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-cold transition-colors duration-200 hover:bg-muted"
+            className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-cold transition-colors duration-200 hover:bg-muted"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -86,7 +86,7 @@ export default function ConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="inline-flex h-10 cursor-pointer items-center justify-center rounded-md border border-border bg-surface px-4 text-sm font-medium text-fg transition-colors duration-200 hover:bg-muted disabled:opacity-50"
+            className="inline-flex h-11 cursor-pointer items-center justify-center rounded-md border border-border bg-surface px-4 text-sm font-medium text-fg transition-colors duration-200 hover:bg-muted disabled:opacity-50"
           >
             {cancelLabel}
           </button>
@@ -96,7 +96,7 @@ export default function ConfirmDialog({
             onClick={onConfirm}
             disabled={busy}
             className={[
-              "inline-flex h-10 cursor-pointer items-center justify-center rounded-md px-4 text-sm font-semibold transition-colors duration-200 disabled:opacity-50",
+              "inline-flex h-11 cursor-pointer items-center justify-center rounded-md px-4 text-sm font-semibold transition-colors duration-200 disabled:opacity-50",
               destructive
                 ? "bg-destructive text-destructive-fg hover:opacity-90"
                 : "bg-primary text-primary-fg hover:opacity-90",

@@ -78,7 +78,7 @@ export default function TopBar({ theme, onToggleTheme }: Props) {
         <div className="flex items-center gap-2">
           {user && (
             <div className="hidden items-center gap-2 md:flex">
-              <span className="max-w-[180px] truncate text-xs text-muted" title={user.email}>
+              <span className="max-w-[180px] truncate text-xs text-cold" title={user.email}>
                 {user.email}
               </span>
               <button
@@ -138,7 +138,7 @@ export default function TopBar({ theme, onToggleTheme }: Props) {
                 className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium text-fg transition-colors duration-200 hover:bg-muted"
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" /> Sign out
-                <span className="ml-1 truncate text-xs text-muted">{user.email}</span>
+                <span className="ml-1 truncate text-xs text-cold">{user.email}</span>
               </button>
             )}
           </div>

@@ -51,7 +51,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
 // Confidence shown as quiet colored text rather than another chip.
 const CONFIDENCE_TEXT: Record<string, string> = {
   confirmed: "text-primary",
-  likely: "text-warm",
+  likely: "text-warm-text",
   rumored: "text-cold",
 };
 
@@ -234,7 +234,7 @@ function TriageButton({
       disabled={disabled}
       aria-pressed={active}
       className={[
-        "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors duration-200 disabled:opacity-60",
+        "inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors duration-200 disabled:opacity-60 sm:h-9",
         active
           ? "border-primary bg-primary/10 text-primary"
           : "border-border text-cold hover:bg-muted hover:text-fg",

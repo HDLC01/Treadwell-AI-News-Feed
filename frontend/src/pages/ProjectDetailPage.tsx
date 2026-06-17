@@ -191,7 +191,7 @@ function ConfirmDismiss({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="inline-flex h-9 cursor-pointer items-center rounded-md border border-border px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-muted disabled:opacity-50"
+            className="inline-flex h-11 cursor-pointer items-center rounded-md border border-border px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-muted disabled:opacity-50"
           >
             Cancel
           </button>
@@ -199,7 +199,7 @@ function ConfirmDismiss({
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md bg-destructive px-3 text-sm font-semibold text-destructive-fg transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
+            className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-md bg-destructive px-3 text-sm font-semibold text-destructive-fg transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Ban className="h-4 w-4" aria-hidden="true" />}
             Dismiss
@@ -337,7 +337,7 @@ export function ProjectDetailPage() {
           <button
             type="button"
             onClick={() => void loadProject()}
-            className="mt-1 inline-flex h-9 cursor-pointer items-center rounded-md border border-border px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-muted"
+            className="mt-1 inline-flex h-11 cursor-pointer items-center rounded-md border border-border px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-muted"
           >
             Retry
           </button>
@@ -448,7 +448,7 @@ export function ProjectDetailPage() {
                   disabled={!!savingStatus}
                   aria-pressed={active}
                   className={[
-                    "inline-flex h-9 cursor-pointer items-center gap-1.5 rounded px-2.5 text-xs font-semibold transition-colors duration-150 disabled:opacity-60",
+                    "inline-flex h-11 cursor-pointer items-center gap-1.5 rounded px-2.5 text-xs font-semibold transition-colors duration-150 disabled:opacity-60",
                     active
                       ? opt.destructive
                         ? "bg-destructive text-destructive-fg"
@@ -556,6 +556,7 @@ export function ProjectDetailPage() {
                 onChange={(e) => setNotes(e.target.value)}
                 onBlur={() => void saveNotes()}
                 rows={4}
+                aria-label="Project notes"
                 placeholder="Private notes for this project (saves when you click away)…"
                 className="w-full resize-y rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg/40 focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />

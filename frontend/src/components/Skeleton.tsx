@@ -37,7 +37,7 @@ interface GridProps {
 /** A responsive grid of card skeletons matching the feed layout. */
 export function ProjectGridSkeleton({ count = 6 }: GridProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {Array.from({ length: count }).map((_, i) => (
         <ProjectCardSkeleton key={i} />
       ))}

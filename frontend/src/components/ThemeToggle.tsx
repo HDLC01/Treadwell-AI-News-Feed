@@ -13,6 +13,7 @@ export default function ThemeToggle({ theme, onToggle }: Props) {
       type="button"
       onClick={onToggle}
       aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+      aria-pressed={isDark}
       title={isDark ? "Switch to light theme" : "Switch to dark theme"}
       className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border border-border bg-surface text-fg transition-colors duration-200 hover:bg-muted"
     >

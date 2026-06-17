@@ -123,14 +123,14 @@ export default function FilterBar({ value, onChange, resultCount }: Props) {
             onChange={(e) => setSearchText(e.target.value)}
             placeholder="Search projects, cities, companies…"
             aria-label="Search projects"
-            className="h-11 w-full rounded-lg border border-border bg-bg pl-9 pr-9 text-sm text-fg placeholder:text-cold focus:border-primary focus:outline-none"
+            className="h-11 w-full rounded-lg border border-border bg-bg pl-9 pr-9 text-sm text-fg placeholder:text-cold focus:border-primary focus-visible:ring-2 focus-visible:ring-ring"
           />
           {searchText && (
             <button
               type="button"
               onClick={() => setSearchText("")}
               aria-label="Clear search"
-              className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-cold transition-colors duration-200 hover:bg-muted"
+              className="absolute right-2 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-cold transition-colors duration-200 hover:bg-muted"
             >
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -166,7 +166,7 @@ export default function FilterBar({ value, onChange, resultCount }: Props) {
             onChange={(e) =>
               onChange({ ...value, sort: e.target.value as ProjectSort })
             }
-            className="h-11 cursor-pointer appearance-none rounded-lg border border-border bg-bg pl-9 pr-8 text-sm text-fg focus:border-primary focus:outline-none"
+            className="h-11 cursor-pointer appearance-none rounded-lg border border-border bg-bg pl-9 pr-8 text-sm text-fg focus:border-primary focus-visible:ring-2 focus-visible:ring-ring"
           >
             {SORT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -273,7 +273,7 @@ function ChipGroup({
       <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-cold">
         {label}
       </p>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         {options.map(([val, lbl]) => {
           const on = selected.includes(val);
           return (
@@ -283,7 +283,7 @@ function ChipGroup({
               onClick={() => onToggle(val)}
               aria-pressed={on}
               className={[
-                "inline-flex cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors duration-200",
+                "inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-200 sm:min-h-9",
                 on
                   ? "border-primary bg-primary text-primary-fg"
                   : "border-border bg-bg text-fg hover:bg-muted",
