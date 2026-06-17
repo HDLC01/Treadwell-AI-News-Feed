@@ -18,7 +18,10 @@ from models.schemas import OkResponse, SubscribeRequest
 
 router = APIRouter(tags=["subscribers"])
 
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Linear (no overlapping quantifiers): domain labels exclude '.', so there's no
+# ambiguous backtracking between the label classes and the literal dots — avoids
+# the polynomial-ReDoS of `[^@\s]+\.[^@\s]+`.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$")
 
 
 def _unsub_page(message: str, ok: bool = True) -> HTMLResponse:
@@ -54,7 +57,7 @@ def _unsub_page(message: str, ok: bool = True) -> HTMLResponse:
 def subscribe(body: SubscribeRequest) -> OkResponse:
     """Add (or reactivate) a digest subscriber by email."""
     email = (body.email or "").strip().lower()
-    if not _EMAIL_RE.match(email):
+    if len(email) > 254 or not _EMAIL_RE.match(email):  # 254 = RFC 5321 max
         raise HTTPException(status_code=422, detail="A valid email address is required.")
 
     if settings.demo_mode:
