@@ -10,11 +10,15 @@ stdin, the working directory and the child's environment.
 from __future__ import annotations
 
 import ast
+import http.server
 import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
+import tempfile
+import threading
 
 import pytest
 
@@ -193,3 +197,199 @@ def test_the_child_keeps_what_the_cli_needs_to_start_and_log_in(runner, monkeypa
     assert env["PATH"] == os.environ["PATH"]
     assert env["LANG"] == "C.UTF-8"
     assert env["LC_ALL"] == "C.UTF-8"
+
+
+# ── the CLI's own project folder ────────────────────────────────────────────
+#
+# The real CLI files per-project state under <config>/projects/<slug of cwd>.
+# With --no-session-persistence it writes no transcript, but on Linux it still
+# creates an empty <slug>/memory folder, and every call has a new cwd. Measured
+# in the shipped image: 4 calls, 4 folders left on /root/.claude. The fakes
+# below do what the CLI does; the last test runs the CLI itself.
+
+def _cli_slug(path):
+    """The CLI's rule, read out of its binary: replace(/[^a-zA-Z0-9]/g, "-")."""
+    return re.sub(r"[^a-zA-Z0-9]", "-", str(path))
+
+
+class CliLikeRecorder(Recorder):
+    """A Recorder that, like the real CLI, creates the empty
+    <config>/projects/<slug of its working directory>/memory folder."""
+
+    def __init__(self, *, physical=False, write_file=None, raise_timeout=False):
+        super().__init__()
+        self.physical = physical          # slug the resolved path, as getcwd() sees it
+        self.write_file = write_file
+        self.raise_timeout = raise_timeout
+        self.created = []
+
+    def __call__(self, args, **kwargs):
+        env = kwargs["env"]
+        home = env["USERPROFILE"] if os.name == "nt" else env["HOME"]
+        config = env.get("CLAUDE_CONFIG_DIR") or os.path.join(home, ".claude")
+        cwd = os.path.realpath(kwargs["cwd"]) if self.physical else kwargs["cwd"]
+        memory = os.path.join(config, "projects", _cli_slug(cwd), "memory")
+        os.makedirs(memory)
+        self.created.append(memory)
+        if self.write_file:
+            pathlib.Path(memory, self.write_file).write_text("kept", encoding="utf-8")
+        result = super().__call__(args, **kwargs)
+        if self.raise_timeout:
+            raise subprocess.TimeoutExpired(args, kwargs.get("timeout"))
+        return result
+
+
+@pytest.fixture
+def cli_config(tmp_path, monkeypatch):
+    """A CLAUDE_CONFIG_DIR, and a temp base whose name exercises the slug rule
+    beyond the path separator ('_', '.', a space)."""
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    base = tmp_path / "tmp_base.with space"
+    base.mkdir()
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(cfg))
+    monkeypatch.setattr(tempfile, "tempdir", str(base))
+    return cfg
+
+
+def test_the_empty_folder_the_cli_makes_for_each_call_is_removed(cli_config, monkeypatch):
+    rec = CliLikeRecorder()
+    monkeypatch.setattr(claude_cli.subprocess, "run", rec)
+    for i in range(3):
+        claude_cli.call_claude_json(f"page {i}")
+    assert len(set(rec.created)) == 3, "the fake must have made one folder per call"
+    assert os.listdir(cli_config / "projects") == []
+
+
+def test_the_default_config_dir_is_cleaned_too(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    rec = CliLikeRecorder()
+    monkeypatch.setattr(claude_cli.subprocess, "run", rec)
+    claude_cli.call_claude("one")
+    claude_cli.call_claude("two")
+    assert len(rec.created) == 2
+    assert all(pathlib.Path(p).is_relative_to(home) for p in rec.created)
+    assert os.listdir(home / ".claude" / "projects") == []
+
+
+def test_cleanup_never_deletes_a_file_or_touches_another_project(cli_config, monkeypatch):
+    other = cli_config / "projects" / "-app" / "memory"
+    other.mkdir(parents=True)
+    rec = CliLikeRecorder(write_file="MEMORY.md")
+    monkeypatch.setattr(claude_cli.subprocess, "run", rec)
+    claude_cli.call_claude("x")
+    (mine,) = rec.created
+    assert pathlib.Path(mine, "MEMORY.md").read_text(encoding="utf-8") == "kept"
+    assert other.is_dir(), "an empty folder that is not this call's must be left alone"
+
+
+def test_the_folder_is_removed_when_the_call_times_out(cli_config, monkeypatch):
+    rec = CliLikeRecorder(raise_timeout=True)
+    monkeypatch.setattr(claude_cli.subprocess, "run", rec)
+    with pytest.raises(claude_cli.ClaudeCLIError, match="timed out"):
+        claude_cli.call_claude("x", timeout=5)
+    assert len(rec.created) == 1
+    assert os.listdir(cli_config / "projects") == []
+
+
+@pytest.mark.parametrize("physical", [False, True],
+                         ids=["cli-sees-given-path", "cli-sees-resolved-path"])
+def test_a_symlinked_temp_dir_is_cleaned_whichever_path_the_cli_sees(
+        cli_config, tmp_path, monkeypatch, physical):
+    real = tmp_path / "real_tmp"
+    real.mkdir()
+    link = tmp_path / "link_tmp"
+    try:
+        link.symlink_to(real, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("this box cannot create a directory symlink")
+    assert _cli_slug(os.path.realpath(link)) != _cli_slug(link)
+    monkeypatch.setattr(tempfile, "tempdir", str(link))
+    rec = CliLikeRecorder(physical=physical)
+    monkeypatch.setattr(claude_cli.subprocess, "run", rec)
+    claude_cli.call_claude("x")
+    assert len(rec.created) == 1
+    assert os.listdir(cli_config / "projects") == []
+
+
+@pytest.fixture
+def refusing_api():
+    """A local stand-in for the API that answers 401 to everything, so the real
+    CLI starts, sets up its session and exits without a real account."""
+
+    class Deny(http.server.BaseHTTPRequestHandler):
+        def _deny(self):
+            body = json.dumps({"type": "error", "error": {
+                "type": "authentication_error", "message": "test stub"}}).encode()
+            self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        do_GET = do_POST = do_HEAD = _deny
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Deny)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.skipif(os.environ.get("NEWSFEED_REAL_CLI") != "1" or not shutil.which("claude"),
+                    reason="runs the real `claude` binary; opt in with NEWSFEED_REAL_CLI=1")
+def test_the_real_cli_leaves_no_folder_behind(tmp_path, monkeypatch, refusing_api):
+    r"""The container-level check: only the real CLI makes the folder. Run it in
+    the shipped image, offline (pytest is not in the image, so mount wheels):
+
+        docker run --rm --network none -e NEWSFEED_REAL_CLI=1 \
+          -v "$PWD:/work:ro" -v "$WHEELS:/wheels:ro" -w /work/backend \
+          --entrypoint sh treadwell-newsfeed:latest -c \
+          "pip install -q --no-index -f /wheels pytest && python -m pytest tests -q -p no:cacheprovider"
+
+    from the repo root, where $WHEELS holds `pip download pytest -d $WHEELS`.
+    No real account is used: the token is fake and the API is a local stub
+    that answers 401.
+    """
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-not-a-real-token")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", refusing_api)
+    projects = cfg / "projects"
+
+    def listing():
+        return sorted(os.listdir(projects)) if projects.is_dir() else []
+
+    # Guard the guard: the CLI itself, started exactly the way call_claude
+    # starts it but with no cleanup, must leave its folder. If it does not (it
+    # keys on the git root when the temp dir sits inside a repo), this test
+    # would pass by checking nothing.
+    d = tempfile.mkdtemp(prefix="newsfeed-claude-")
+    try:
+        subprocess.run(list(claude_cli._CLAUDE_ARGV), input="x", capture_output=True,
+                       text=True, cwd=d, env=claude_cli._cli_env(), timeout=120)
+    finally:
+        os.rmdir(d)
+    mine = {_cli_slug(d), _cli_slug(os.path.realpath(d))} & set(listing())
+    if not mine:
+        pytest.skip(f"the CLI did not key this session on its cwd (left {listing()}); "
+                    "put TMPDIR outside any git repo")
+    for name in mine:
+        for root, _dirs, _files in os.walk(projects / name, topdown=False):
+            os.rmdir(root)
+    before = listing()
+
+    for i in range(3):
+        with pytest.raises(claude_cli.ClaudeCLIError):
+            claude_cli.call_claude(f"page {i}", timeout=120)
+    assert listing() == before

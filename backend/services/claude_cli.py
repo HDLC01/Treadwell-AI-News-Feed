@@ -43,7 +43,8 @@ proposal tool locks down its autofill call:
     so the CLI finds no CLAUDE.md, .mcp.json or .claude/settings.json, and
     nothing one call leaves behind can reach the next. `--no-session-persistence`
     stops each of those one-off directories leaving a transcript of scraped
-    text on the credentials volume.
+    text on the credentials volume, and the empty per-directory project
+    folder the CLI still creates there is removed after the call.
   * `timeout` bounds every call.
 
 Do NOT add `--bare`. It skips hooks and CLAUDE.md, which sounds right, but it
@@ -56,6 +57,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import tempfile
 from typing import Dict
@@ -111,6 +113,42 @@ def _cli_env() -> Dict[str, str]:
     }
 
 
+# The CLI keeps per-project state in <config dir>/projects/<slug>, where <slug>
+# is the working directory with every character outside [A-Za-z0-9] turned into
+# "-" (that rule is read out of the shipped CLI binary). It keys on the git root
+# instead when the directory sits inside a repo, which a temp dir in the
+# container does not. With --no-session-persistence it writes no transcript
+# there, but it still creates an empty <slug>/memory folder. Every call has a
+# new cwd, so without cleanup every AI call would leave one more empty folder on
+# the persistent credentials volume, forever.
+_SLUG_UNSAFE = re.compile(r"[^a-zA-Z0-9]")
+
+
+def _cli_project_dirs(cwd: str, env: Dict[str, str]) -> list:
+    """Where the CLI files its project state for a session started in `cwd`.
+
+    The same config dir the child resolves (CLAUDE_CONFIG_DIR, else ~/.claude,
+    and the child's HOME is ours). Both the path as given and its resolved form,
+    because the CLI slugs the directory it finds itself in, which can differ
+    from the path we passed when the temp dir sits behind a symlink."""
+    config = env.get("CLAUDE_CONFIG_DIR") or os.path.join(
+        os.path.expanduser("~"), ".claude")
+    slugs = {_SLUG_UNSAFE.sub("-", p) for p in (cwd, os.path.realpath(cwd))}
+    return [os.path.join(config, "projects", s) for s in sorted(slugs)]
+
+
+def _remove_empty_dirs(top: str) -> None:
+    """rmdir `top` and the folders under it, bottom-up, each only if empty.
+
+    os.rmdir refuses a directory that still holds anything, so this never
+    deletes a file: if the CLI ever does write something there, it stays."""
+    for root, _dirs, _files in os.walk(top, topdown=False):
+        try:
+            os.rmdir(root)
+        except OSError:
+            pass
+
+
 class ClaudeCLIError(RuntimeError):
     """Raised when the local `claude` CLI fails."""
 
@@ -124,18 +162,24 @@ def call_claude(user_prompt: str, system: str = "", *, timeout: int = 120) -> st
         # for human collaboration and would bias the answers.
         with tempfile.TemporaryDirectory(prefix="newsfeed-claude-",
                                          ignore_cleanup_errors=True) as cwd:
-            result = subprocess.run(
-                list(_CLAUDE_ARGV),
-                input=full_prompt,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                cwd=cwd,
-                env=_cli_env(),
-                timeout=timeout,
-                shell=False,
-            )
+            env = _cli_env()
+            try:
+                result = subprocess.run(
+                    list(_CLAUDE_ARGV),
+                    input=full_prompt,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    cwd=cwd,
+                    env=env,
+                    timeout=timeout,
+                    shell=False,
+                )
+            finally:
+                # Also after a timeout: run() has killed and reaped the child.
+                for project_dir in _cli_project_dirs(cwd, env):
+                    _remove_empty_dirs(project_dir)
     except FileNotFoundError as exc:
         raise ClaudeCLIError(
             "`claude` CLI not found on PATH. Install Claude Code: "
