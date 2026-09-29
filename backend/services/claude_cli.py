@@ -17,21 +17,98 @@ Public API:
     call_claude_json(user_prompt, system="", timeout=120) -> dict | list | None
         Convenience: call_claude + parse_loose_json. Returns None if the model
         produced no parseable JSON (callers must handle the None / fallback path).
+
+SECURITY: every prompt sent from here carries UNTRUSTED text. Signal
+extraction, relevance scoring, clustering and contact enrichment all feed the
+model scraped web pages, articles and search results, so anyone who can get a
+page into a source can write instructions into it. The subprocess is therefore
+a text-in/JSON-out transform with no way to act. It is locked down the way the
+proposal tool locks down its autofill call:
+
+  * `--tools ""` registers no built-in tools (no Bash, Read, Write, WebFetch).
+    This is not a permission rule: the tools do not exist in the session, so no
+    prompt or settings file can grant them back. Measured on the proposal
+    tool's call of the same shape: without it, `claude -p` reads a file and
+    runs a shell command on request. Here that would happen as root, inside a
+    container that holds the Supabase service-role key.
+  * `--strict-mcp-config` with no `--mcp-config` loads zero MCP servers, so a
+    server configured on the /root/.claude volume cannot hand this session
+    tools either.
+  * The prompt goes on stdin and argv is a constant. Untrusted text never lands
+    in a flag or a system prompt.
+  * `env=_cli_env()` gives the child an allowlist: PATH, HOME, locale and the
+    CLI's own login. The Supabase keys, the Resend key, the JWT secret, the
+    connector's API key and every other app setting stay in this process.
+  * Each call runs in a fresh, empty temp directory that is deleted afterwards,
+    so the CLI finds no CLAUDE.md, .mcp.json or .claude/settings.json, and
+    nothing one call leaves behind can reach the next. `--no-session-persistence`
+    stops each of those one-off directories leaving a transcript of scraped
+    text on the credentials volume.
+  * `timeout` bounds every call.
+
+Do NOT add `--bare`. It skips hooks and CLAUDE.md, which sounds right, but it
+also stops the CLI reading the OAuth login this container authenticates with,
+and every AI stage of the pipeline would go dark.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 import tempfile
+from typing import Dict
 
 log = logging.getLogger("newsfeed.claude")
 
-# Spawn `claude` from a clean temp dir so it does NOT inherit this project's
-# CLAUDE.md (that file is meta-instructions for human collaboration; injecting
-# it into every backend call would bias responses and waste cache tokens).
-_CLEAN_CWD = tempfile.mkdtemp(prefix="newsfeed-claude-")
+# The exact command. Constant on purpose: nothing from a prompt is ever spliced
+# in, and the tests pin it. `--tools` takes a variable number of values, so the
+# empty string must be followed by another flag to land as its only value.
+_CLAUDE_ARGV = (
+    "claude", "-p",
+    "--tools", "",
+    "--strict-mcp-config",
+    "--no-session-persistence",
+    "--output-format", "json",
+)
+
+# What the child process is allowed to see from our environment. An allowlist,
+# not a scrub: in production `env_file: .env` puts every secret this app has
+# into os.environ, so anything not named here stays behind, including secrets
+# nobody has added yet. Compared upper-cased because Windows (local dev)
+# upper-cases environment names.
+_CLI_ENV_KEEP = frozenset({
+    # Find `node` and `claude`; find ~/.claude, where `claude login` keeps the
+    # credentials on the claude_credentials volume.
+    "PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "TZ", "LANG", "LANGUAGE",
+    # The CLI's own login, and where its config lives when moved off ~/.claude.
+    # The ANTHROPIC_* names are kept so the CLI picks the same credential and
+    # endpoint it picks today; dropping one would silently change which account
+    # is billed or where the call goes.
+    "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR",
+    "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
+    # On a host behind a proxy or a private CA the CLI cannot reach the API
+    # without these.
+    "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY",
+    "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR",
+    # Windows (local dev only): the home directory, Winsock and temp paths
+    # node resolves at startup, and the Git Bash the Windows CLI looks for.
+    "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT",
+    "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
+    "TEMP", "TMP", "PROGRAMFILES", "PROGRAMDATA",
+    "CLAUDE_CODE_GIT_BASH_PATH",
+})
+_CLI_ENV_KEEP_PREFIXES = ("LC_",)   # locale: LC_ALL, LC_CTYPE, ...
+
+
+def _cli_env() -> Dict[str, str]:
+    """The allowlisted slice of our environment, for the `claude` child."""
+    return {
+        k: v for k, v in os.environ.items()
+        if k.upper() in _CLI_ENV_KEEP
+        or k.upper().startswith(_CLI_ENV_KEEP_PREFIXES)
+    }
 
 
 class ClaudeCLIError(RuntimeError):
@@ -42,17 +119,23 @@ def call_claude(user_prompt: str, system: str = "", *, timeout: int = 120) -> st
     full_prompt = f"{system}\n\n{user_prompt}" if system else user_prompt
 
     try:
-        result = subprocess.run(
-            ["claude", "-p", "--output-format", "json"],
-            input=full_prompt,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            cwd=_CLEAN_CWD,
-            timeout=timeout,
-            shell=False,
-        )
+        # A fresh empty directory per call (see SECURITY above). It also keeps
+        # this project's CLAUDE.md out of every call: that file is instructions
+        # for human collaboration and would bias the answers.
+        with tempfile.TemporaryDirectory(prefix="newsfeed-claude-",
+                                         ignore_cleanup_errors=True) as cwd:
+            result = subprocess.run(
+                list(_CLAUDE_ARGV),
+                input=full_prompt,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=cwd,
+                env=_cli_env(),
+                timeout=timeout,
+                shell=False,
+            )
     except FileNotFoundError as exc:
         raise ClaudeCLIError(
             "`claude` CLI not found on PATH. Install Claude Code: "
