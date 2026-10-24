@@ -1,102 +1,100 @@
 # Treadwell AI News Feed — CLAUDE.md
 
 ## What this is
-A project-first **construction-opportunity radar**. The unit is a deduplicated PROJECT
-(not a news article), enriched over time, showing location + distance from Kansas City,
-stage, and a team hierarchy (General Contractor > Developer > Owner) with confidence.
-Goal: get Treadwell in front of large-project teams — especially data centers — before
-bid invites go out. News/permits/filings are *evidence* attached to a project, never the
-top-level unit. (Contrast: the BioStar reference is an article-first RSS reader; we invert it.)
 
-## SEPARATE SYSTEM — hard boundary
-This is a STANDALONE project with its OWN git repo and its OWN subdomain
-(newsfeed.wetreadwell.com). It is NOT part of, and MUST NOT import from or deploy with:
-  - ../treadwell-proposal-tool  (proposals.wetreadwell.com)
-  - ../Treadwell                (the main Expo + FastAPI app)
-Proven patterns from those projects may be COPIED into this repo, never imported. It has
-its own Supabase project, its own container, its own nginx server block and TLS cert. It
-shares only the physical VPS host (50.6.110.215).
+A project-first construction-opportunity radar. The primary record is a deduplicated
+**project**, never an article. News, permits, and filings are evidence attached to that
+project as it is enriched with location, Kansas City distance, delivery stage, project
+team hierarchy, contacts, and relevance.
 
-- **GitHub repo:** https://github.com/HDLC01/Treadwell-AI-News-Feed
-- **Subdomain (target):** newsfeed.wetreadwell.com
+The purpose is to put Treadwell in front of major projects — particularly data centers —
+before bid invitations. It is a standalone application with its own repository, data
+Supabase project, container, subdomain target, and nginx configuration. Do not import from
+the proposal tool, main Treadwell system, or roadmap. Copy/adapt a proven idea locally.
 
-## Golden rules
-- **TEST LOCALLY FIRST.** Never push to GitHub or deploy to the VPS until the app runs and
-  passes local smoke tests AND Hanz has given the go-ahead.
-- **AI drafts, humans decide.** Especially Phase-2 outreach: one-at-a-time human approval
-  only — there is NO batch-send endpoint.
-- **Never scrape LinkedIn.** Respect robots.txt + ToS; descriptive User-Agent; rate-limit
-  per host; store source_url on every contact; honor do_not_contact.
+## Current architecture — verified from source on 2026-07-22
 
-## Radius rules
-  - project_type == data_center  -> in radius if distance_from_KC <= 350 miles
-  - everything else              -> in radius if distance_from_KC <= 70 miles
-KC origin = (39.0997, -94.5786). Distance is great-circle (Haversine) for the in/out gate.
+- Backend: FastAPI (Python 3.11), APScheduler pipeline, server-served Vite/React SPA.
+- Frontend: React 18, TypeScript, Vite, Tailwind, React Router, and Leaflet map views.
+- Data: this app's own Supabase Postgres, accessed server-side only via
+  `services/supabase_client.py` with retry handling. Browsers do not receive data-project
+  credentials.
+- Authentication: shared Treadwell Supabase **auth** project signs in `@wetreadwell.com`
+  users; it is distinct from the News Feed data project. Admins are configuration-derived.
+- AI: local `claude -p` CLI for structured extraction, dedup adjudication, and relevance
+  scoring. All model output is constrained to controlled vocabulary before persistence.
+- Email: Resend sends subscription digests and the opt-in daily hot-project summary.
+- Deployment: a single Docker container on loopback port `8890`; build off-box and ship
+  prebuilt images with `deploy/ship.sh`. Do not build on the shared 1 vCPU/2 GB VPS.
 
-## Stack
-  - Backend: FastAPI (Python 3.11) — REST API + APScheduler daily job + serves the built SPA
-  - Frontend: Vite + React + TypeScript + Tailwind + shadcn-style components (built to static,
-    served by FastAPI StaticFiles)
-  - DB: Supabase (Postgres) — server-side via supabase-py with the service-role key
-  - AI: local `claude -p` CLI via subprocess (NO cloud Anthropic API) — extraction, dedup, scoring
-  - Ingestion: httpx + feedparser (RSS) + BeautifulSoup/lxml (HTML scraping). Playwright is
-    deferred to a later phase (JS-gated permit portals) — NOT in v1.
-  - Email: Resend (transactional) from a dedicated sending subdomain w/ SPF/DKIM/DMARC
-  - Deploy: single Docker container on the Bluehost VPS, nginx reverse proxy + certbot
+## Access models
 
-## Design system (UI/UX Pro Max: "Data-Dense Dashboard")
-  - Light + dark. Primary #1E40AF, secondary #3B82F6, accent/CTA #D97706, status: hot=red
-    #DC2626 / warm=amber #D97706 / cold=slate #64748B. Destructive #DC2626.
-  - Body: Fira Sans. Numerals / IDs / distances: Fira Code (tabular figures). Icons: lucide-react
-    (SVG) — NO emoji as icons.
-  - Mobile-first: 375 / 768 / 1024 / 1440. Touch targets >= 44px. Respect prefers-reduced-motion.
-  - Lists paginate at 25/page. Destructive actions (dismiss/remove/merge) require a confirm dialog.
+- Internal users are Google SSO principals: `admin` or read-only `viewer`.
+- The custom connector in `mcp/` is a separate, read-only service principal using
+  `X-Api-Key`. It can never write to the feed. Its own container/domain/deploy flow is
+  independent from the feed application.
+- `DEV_LOGIN` is a local preview mechanism only; it must remain false in production.
+- With no data Supabase credentials, the backend enters safe `DEMO_MODE` automatically
+  and uses fixtures. It must still start and keep `/api/health` useful.
 
-## Layout
-  Treadwell AI News Feed/
-    SPEC.md                        # the full build contract (schema, enums, interfaces, API, types)
-    backend/
-      main.py                      # FastAPI app + APScheduler lifespan + StaticFiles mount of ../frontend/dist
-      config.py                    # pydantic-settings from .env
-      requirements.txt
-      .env.example
-      routers/                     # health, projects, contacts, digests, subscribers, admin
-      services/
-        claude_cli.py              # ADAPTED pattern: `claude -p --output-format json`
-        supabase_client.py         # ADAPTED pattern: HTTP/1.1 patch + retry wrapper
-        ingest.py                  # source fetch + parser registry (rss/html)
-        signal_extractor.py        # claude -p: article/filing -> structured project+team JSON
-        clusterer.py               # dedup: deterministic blocking + claude -p adjudication
-        team_enricher.py           # reconcile team assertions -> project_team rows + rollup
-        geocode.py                 # US Census geocoder (+ Nominatim fallback) + Haversine + radius
-        relevance_scorer.py        # claude -p: 0-100 score + hot/warm/cold + reasoning
-        digest_builder.py          # select today's new/updated projects -> html/text
-        mailer.py                  # Resend send w/ unsubscribe link (behind a flag)
-      jobs/daily.py                # the scheduled pipeline entrypoint (Stages 0-9)
-      models/schemas.py            # pydantic response models
-    frontend/                      # Vite + React SPA (built to dist/, served by FastAPI)
-    supabase/migrations/           # NNN_name.sql, idempotent (DO $$ ... IF NOT EXISTS)
-    Dockerfile                     # multi-stage: Node builds SPA -> Python runtime w/ claude CLI baked
-    docker-compose.yml
-    deploy/                        # nginx server block + certbot + install notes for the subdomain
+## Domain and pipeline invariants
 
-## Run locally
-  - Backend:  cd backend && uvicorn main:app --reload --port 8890   (own port; avoid 8000/8888)
-  - Frontend: cd frontend && npm run dev   (Vite dev server, proxy /api -> :8890)
-  - Pipeline (manual): POST /api/admin/run-pipeline   (respects the DB run-lock)
-  - Migrations: run supabase/migrations/*.sql in order against the (new, separate) Supabase project.
+- A project is the unit of deduplication. Sources/signals are evidence rows; never turn
+  the UI back into an article-first reader.
+- Kansas City is `(39.0997, -94.5786)`. Data centers are in range at 350 miles or less;
+  every other type at 70 miles or less, using Haversine distance.
+- Pipeline stages are fetch → extract → cluster/dedup → team/contact enrichment →
+  geocode/radius → relevance → persistence → digest/summary. The run lock permits only
+  one active pipeline at a time.
+- Stale-project policy is configuration-driven (`STALE_MONTHS`); do not resurrect stale
+  evidence without a new, relevant signal.
+- Every contact needs provenance (`source`/`source_url`) and must respect
+  `do_not_contact`.
+- Never scrape LinkedIn. Respect robots.txt and site terms, use a descriptive User-Agent,
+  per-host rate limits, and a search API only for permitted public URL resolution.
+- Outreach is human-approved, one item at a time. There is no batch-send endpoint.
 
-## Conventions
-  - All DB access through services/supabase_client.py with with_supabase_retry().
-  - All AI through services/claude_cli.py. Controlled-vocabulary enums; silently drop off-list values.
-  - Every source is a row in `sources` (config-as-data); each parser is isolated so one dead
-    source never kills a run.
-  - The backend must START even without Supabase/Resend creds configured (health endpoint stays
-    green); services raise clear errors only when actually invoked.
+## Code map
 
-## Deploy (only after local tests pass + Hanz approves)
-  - SSH: ssh -i ~/.ssh/treadwell_vps root@50.6.110.215  (key already on this machine; 50.6.110.215
-    already in known_hosts). App dir on VPS: /opt/treadwell-newsfeed (separate from /opt/treadwell).
-  - DNS: A-record `newsfeed` -> 50.6.110.215 in Bluehost DNS for wetreadwell.com.
-  - Own nginx server block + Let's Encrypt cert for newsfeed.wetreadwell.com. Container binds
-    127.0.0.1:8890; nginx reverse-proxies 80/443 -> 8890.
+| Location | Responsibility |
+|---|---|
+| `SPEC.md` | Full build contract: schema, enums, interfaces, endpoints, and types. |
+| `backend/main.py`, `config.py`, `auth.py` | App boot, environment modes, SSO/service-principal enforcement. |
+| `backend/jobs/daily.py`, `dedupe.py` | Scheduled pipeline orchestration and dedup task handling. |
+| `backend/services/` | Ingestion, guardrails, extraction, clustering, team/contact enrichment, geocoding, relevance, recency, digest, and mail. |
+| `backend/routers/` | Projects/map/stats, contacts, digests, subscribers, admin pipeline/summary, and auth config. |
+| `supabase/migrations/` | Ordered, idempotent data-schema and source/pipeline migrations. |
+| `frontend/src/pages/` | Feed, map, pipeline, project detail, digests, and admin UI. |
+| `mcp/` | Standalone FastMCP read-only connector and grounded outreach draft helper. |
+
+## Local run and verification
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8890
+
+cd ..\frontend
+npm install
+npm run dev
+npm run typecheck
+npm run build
+```
+
+With no environment variables, use the fixture-backed UI and verify `/api/health`. With a
+real data project, apply `supabase/migrations/` in numeric order, configure the private
+environment, then run the pipeline manually through `/api/admin/run-pipeline` before
+enabling the schedule.
+
+## Deploy and safety rules
+
+- Test locally first and get Hanz's approval before pushing, running migrations, enabling
+  scheduler/email, or deploying.
+- `deploy/ship.sh` is the current delivery path: build the Linux image locally, ship/load
+  it, restart Compose without `--build`, then wait for the health endpoint.
+- Runtime configuration/secrets (Supabase service role, Resend, shared-auth settings,
+  API key, Claude credentials) never belong in git, source output, or public docs.
+- The connector is read-only by design. Any change that could mutate feed data or send
+  email requires a separate explicit authorization and audit.
