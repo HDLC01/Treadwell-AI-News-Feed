@@ -26,9 +26,11 @@ Confirm it resolves before requesting a cert:
 ---
 
 ## 2. SSH to the VPS
-The key is already on this machine and `50.6.110.215` is already in `known_hosts`:
+Use the `treadwell-vps` alias in `~/.ssh/config` (it supplies the host, port, user and key):
 
-    ssh -i ~/.ssh/treadwell_vps root@50.6.110.215
+    ssh treadwell-vps
+
+The alias logs in as `hanztwell`; the box runs every command as root via sudo.
 
 App directory on the VPS (kept **separate** from `/opt/treadwell`):
 
@@ -38,7 +40,7 @@ App directory on the VPS (kept **separate** from `/opt/treadwell`):
 
 ## 3. First-time setup on the VPS
 ```bash
-# as root@50.6.110.215
+# on the VPS, via `ssh treadwell-vps` (commands run as root)
 mkdir -p /opt/treadwell-newsfeed
 cd /opt/treadwell-newsfeed
 
