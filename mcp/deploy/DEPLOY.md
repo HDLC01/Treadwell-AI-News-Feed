@@ -16,8 +16,9 @@ The repo is private; ship the `mcp/` tree as a tarball (same pattern as the road
 ```bash
 # from the local mcp/ dir
 git archive --format=tar.gz -o /tmp/connector.tgz HEAD .    # or: tar czf with the working tree
-scp -i ~/.ssh/treadwell_vps /tmp/connector.tgz root@50.6.110.215:/tmp/
-ssh -i ~/.ssh/treadwell_vps root@50.6.110.215
+# treadwell-vps = the ~/.ssh/config alias; it logs in as hanztwell and runs commands as root via sudo
+scp /tmp/connector.tgz treadwell-vps:/tmp/
+ssh treadwell-vps
 mkdir -p /opt/treadwell-newsfeed-connector && cd /opt/treadwell-newsfeed-connector
 tar xzf /tmp/connector.tgz
 ```

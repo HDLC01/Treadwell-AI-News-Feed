@@ -1,7 +1,8 @@
 # Kill switch — Treadwell News Feed
 
-Emergency commands on the VPS (ssh -i ~/.ssh/treadwell_vps root@50.6.110.215),
-installed at /usr/local/bin (mirrors the proposal tool's tw-*):
+Emergency commands on the VPS (`ssh treadwell-vps`), installed at /usr/local/bin
+(mirrors the proposal tool's tw-*). The alias logs in as `hanztwell`; the box runs
+every command as root via sudo, e.g. `ssh treadwell-vps nf-down`.
 
 | Command     | Effect |
 |-------------|--------|

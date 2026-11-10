@@ -5,17 +5,23 @@
 # image HERE, ship it over SSH, push the compose file (the VPS dir is NOT a git
 # checkout), then load + restart (NO --build).
 #
-# Prereqs: local Docker engine running; SSH key at ~/.ssh/treadwell_vps.
+# Prereqs: local Docker engine running; the `treadwell-vps` alias in ~/.ssh/config.
+#          The alias supplies the host, port, user and key. It logs in as hanztwell,
+#          and the box runs every command, scp and stdin as root via sudo.
 # Usage:   bash deploy/ship.sh
+#          VPS_HOST / VPS_USER / SSH_KEY still override the target if ever needed.
 set -euo pipefail
 
-VPS_HOST="${VPS_HOST:-50.6.110.215}"
-VPS_USER="${VPS_USER:-root}"
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/treadwell_vps}"
+VPS_HOST="${VPS_HOST:-treadwell-vps}"
+VPS_USER="${VPS_USER:-}"
+SSH_KEY="${SSH_KEY:-}"
 APP_DIR="/opt/treadwell-newsfeed"
 IMAGE="treadwell-newsfeed:latest"
 COMPOSE="docker-compose.yml"
-SSH=(ssh -i "$SSH_KEY" -o ConnectTimeout=20 "${VPS_USER}@${VPS_HOST}")
+SSH_OPTS=(-o ConnectTimeout=20)
+if [ -n "$SSH_KEY" ]; then SSH_OPTS+=(-i "$SSH_KEY"); fi
+TARGET="${VPS_USER:+${VPS_USER}@}${VPS_HOST}"
+SSH=(ssh "${SSH_OPTS[@]}" "$TARGET")
 
 cd "$(dirname "$0")/.."
 
@@ -24,7 +30,7 @@ docker build --platform linux/amd64 -t "$IMAGE" .
 
 echo "==> Shipping image + compose over SSH…"
 docker save "$IMAGE" | gzip | "${SSH[@]}" "cat > /tmp/newsfeed.tar.gz"
-scp -i "$SSH_KEY" "$COMPOSE" "${VPS_USER}@${VPS_HOST}:$APP_DIR/$COMPOSE.new"
+scp "${SSH_OPTS[@]}" "$COMPOSE" "$TARGET:$APP_DIR/$COMPOSE.new"
 
 echo "==> Load + restart on the VPS (NO build)…"
 "${SSH[@]}" "set -euo pipefail
