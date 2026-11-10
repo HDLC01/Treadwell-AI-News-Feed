@@ -9,7 +9,8 @@
 #          The alias supplies the host, port, user and key. It logs in as hanztwell,
 #          and the box runs every command, scp and stdin as root via sudo.
 # Usage:   bash deploy/ship.sh
-#          VPS_HOST / VPS_USER / SSH_KEY still override the target if ever needed.
+#          VPS_HOST alone names a Host entry from ~/.ssh/config. To aim at a raw
+#          address instead, also set VPS_USER and SSH_KEY (no root@, no default key).
 set -euo pipefail
 
 VPS_HOST="${VPS_HOST:-treadwell-vps}"
